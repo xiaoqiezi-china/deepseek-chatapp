@@ -35,6 +35,8 @@ import {
 
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
+/** 缓存正文的字符总量上限；超出时按最久未访问淘汰，避免多个大文本会话长期占用内存。 */
+const SESSION_CACHE_CHAR_BUDGET = 6_000_000
 /** 服务端判定 file_id 失效后，重新补传并重发的最多次数（不含首次请求） */
 const FILE_RETRY_LIMIT = 2
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
@@ -112,6 +114,37 @@ let historyEpoch = 0
 let initTask: Promise<void> | undefined
 const sessionLoads = new Map<string, { promise: Promise<void> }>()
 
+/**
+ * 删除或淘汰会话后主动清空正文：DOM 节点与 React fiber 可能仍持有 session 对象，
+ * 不主动断开的话大段文本会一直留在内存里（表现为删除会话后内存不下降）。
+ */
+const releaseSessionContent = (session: Session | undefined) => {
+  if (!session || session.messages.length === 0) {
+    return
+  }
+  session.messages.length = 0
+  session.rootMessageId = null
+}
+
+/** 估算会话正文体量：只累加字符数，不复制字符串。 */
+const sessionCharSize = (session: Session): number => {
+  let total = 0
+  for (const message of session.messages) {
+    if (message.role === 'user') {
+      total += message.content.length
+      continue
+    }
+    for (const block of message.blocks) {
+      if (block.type === 'text') {
+        total += block.text.length
+      } else if (block.type === 'thinking') {
+        total += block.thinking.length
+      }
+    }
+  }
+  return total
+}
+
 const touchSession = (id: string) => sessionAccess.set(id, ++accessSequence)
 
 const trimSessionCache = () => {
@@ -129,16 +162,48 @@ const trimSessionCache = () => {
         !deletingSessions.has(id)
     )
     .sort((a, b) => (sessionAccess.get(a) ?? 0) - (sessionAccess.get(b) ?? 0))
-  const evicted = new Set(removable.slice(0, ids.length - SESSION_CACHE_LIMIT))
+
+  // 先按数量淘汰，再按正文总量淘汰；当前会话始终保留。
+  const evicted = new Set<string>()
+  let remaining = ids.length
+  for (const id of removable) {
+    if (remaining <= SESSION_CACHE_LIMIT) {
+      break
+    }
+    evicted.add(id)
+    remaining -= 1
+  }
+  let total = 0
+  for (const [id, session] of Object.entries(state.sessionCache)) {
+    if (!evicted.has(id)) {
+      total += sessionCharSize(session)
+    }
+  }
+  for (const id of removable) {
+    if (total <= SESSION_CACHE_CHAR_BUDGET) {
+      break
+    }
+    if (evicted.has(id)) {
+      continue
+    }
+    evicted.add(id)
+    total -= sessionCharSize(state.sessionCache[id])
+  }
+
+  if (evicted.size === 0) {
+    return
+  }
+  const dropped = [...evicted].map((id) => state.sessionCache[id])
   for (const id of evicted) {
     sessionAccess.delete(id)
   }
-  if (evicted.size > 0) {
-    set({
-      sessionCache: Object.fromEntries(
-        Object.entries(state.sessionCache).filter(([id]) => !evicted.has(id))
-      ),
-    })
+  set({
+    sessionCache: Object.fromEntries(
+      Object.entries(state.sessionCache).filter(([id]) => !evicted.has(id))
+    ),
+  })
+  for (const session of dropped) {
+    releaseSessionContent(session)
   }
 }
 
@@ -412,6 +477,7 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
     unsavedSessions.clear()
     pendingFiles.clear()
     clearAllDrafts()
+    const replaced = Object.values(get().sessionCache)
     set({
       ready: true,
       initError: false,
@@ -421,6 +487,9 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
       sessionSaveErrors: {},
       activeId: null,
     })
+    for (const session of replaced) {
+      releaseSessionContent(session)
+    }
     return summaries.length
   } finally {
     set({ importingHistory: false })
@@ -504,6 +573,7 @@ const removeSessionData = async (id: string): Promise<boolean> => {
     unsavedSessions.delete(id)
     pendingFiles.delete(id)
     clearDraft(id)
+    const removed = getSession(id)
     set((state) => ({
       sessions: state.sessions.filter((session) => session.id !== id),
       sessionCache: Object.fromEntries(
@@ -517,6 +587,8 @@ const removeSessionData = async (id: string): Promise<boolean> => {
       ),
       activeId: state.activeId === id ? null : state.activeId,
     }))
+    // 视图卸载后 fiber 仍可能引用该对象，直接清空正文释放内存
+    releaseSessionContent(removed)
     return true
   } catch (error) {
     db.reportStorageError('delete session')(error)
