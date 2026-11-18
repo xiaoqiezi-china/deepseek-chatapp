@@ -21,7 +21,7 @@ Deepseek CE 是基于 DeepSeek 开源 [chat-demo](https://github.com/deepseek-ai
 
 本项目不是 DeepSeek 官方产品。聊天、附件上传与语音功能使用你自己的 API Key 直接请求 DeepSeek 官方 API。
 
-## 为什么这么轻
+## 不仅轻量而且更快
 
 | 项目 | 体积 / 耗时 |
 | --- | --- |
@@ -30,14 +30,16 @@ Deepseek CE 是基于 DeepSeek 开源 [chat-demo](https://github.com/deepseek-ai
 | 启动到首帧 | **约 1 秒**（桌面实测 985 ms） |
 | 启动后页面渲染 | **约 220 ms** |
 
-多数聊天客户端会打包一整套 Chromium，仅这一项就超过 100 MB。Deepseek CE 没有这样做：
+不采用传统的浏览器内核方案，将速度与体积进一步压缩：
 
-- **桌面端**使用 [Tauri 2](https://v2.tauri.app/)（Rust）构建，渲染交给 Windows 自带的 WebView2，数据通过原生 IPC 读写，不启动本地 HTTP 服务。
+- **桌面端**使用 [Tauri 2](https://v2.tauri.app/)（Rust）构建，渲染采用 Windows 自带的 WebView2 运行时，数据通过原生 IPC 读写，不依赖 HTTP 服务。
 - **Android 端**使用 [Capacitor](https://capacitorjs.com/) 构建，渲染交给系统 WebView。
 - 前端是 React 18，由 rspack 编译，生产环境主入口约 500 KB JavaScript。
 - 窗口在第一帧绘制完成后才显示，启动时没有白屏闪烁。
 
-因此下载体积小、安装快，打开基本就是"秒开"。
+因此下载体积小、安装快，打开速度极快。
+
+在实际测试中，deepseekCE的APP版本速度与deepseek官方应用持平且略快
 
 ## 功能
 
