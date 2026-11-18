@@ -1,7 +1,14 @@
 import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon, DeepSeekTitleIcon } from '../base/icons.js'
+import {
+  IconCloseOutline16,
+  IconPanelLeftOutline16,
+  IconSettingsOutline16,
+  IconTrashOutline16,
+  NewChatIcon,
+  DeepSeekTitleIcon,
+} from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
@@ -24,6 +31,11 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
   const [deleting, setDeleting] = useState<SessionSummary | null>(null)
   const [deletePending, setDeletePending] = useState(false)
+  // 多选：从会话菜单进入，选中的会话可批量删除
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set())
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [selectionPending, setSelectionPending] = useState(false)
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -49,31 +61,94 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
     }
   }, [])
 
+  const exitSelection = () => {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+  }
+
+  const enterSelection = (sessionId: string) => {
+    setSelectionMode(true)
+    setSelectedIds(new Set([sessionId]))
+  }
+
+  const toggleSelected = (sessionId: string) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous)
+      if (next.has(sessionId)) {
+        next.delete(sessionId)
+      } else {
+        next.add(sessionId)
+      }
+      return next
+    })
+  }
+
+  const deleteSelected = async () => {
+    if (selectionPending) {
+      return
+    }
+    setSelectionPending(true)
+    let failed = false
+    try {
+      for (const id of [...selectedIds]) {
+        if (!(await removeSession(id))) {
+          failed = true
+        }
+      }
+    } finally {
+      setSelectionPending(false)
+      setConfirmDelete(false)
+      exitSelection()
+    }
+    if (failed) {
+      showToast({ key: 'sessionDeleteFailed', type: 'error' })
+    }
+  }
+
   return (
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
       <div className={styles.top}>
-        <div className={styles.appName}><DeepSeekTitleIcon /></div>
-        <IconButton
-          size="m"
-          icon={<IconPanelLeftOutline16 />}
-          tooltip={t('collapseSiderbarButton')}
-          tooltipPlacement="bottom"
-          onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
-        />
+        {selectionMode ? (
+          <>
+            <div className={styles.selectionTitle}>
+              {t('sessionSelectionCount', { count: selectedIds.size })}
+            </div>
+            <IconButton
+              size="m"
+              icon={<IconCloseOutline16 />}
+              tooltip={t('cancel')}
+              tooltipPlacement="bottom"
+              onClick={exitSelection}
+            />
+          </>
+        ) : (
+          <>
+            <div className={styles.appName}><DeepSeekTitleIcon /></div>
+            <IconButton
+              size="m"
+              icon={<IconPanelLeftOutline16 />}
+              tooltip={t('collapseSiderbarButton')}
+              tooltipPlacement="bottom"
+              onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
+            />
+          </>
+        )}
       </div>
-      <button
-        type="button"
-        className={styles.newChat}
-        onClick={() => {
-          newChat()
-          closeMobileSider()
-        }}
-      >
-        <span className={styles.newChatIcon}>
-          <NewChatIcon />
-        </span>
-        {t('newChat')}
-      </button>
+      {selectionMode ? null : (
+        <button
+          type="button"
+          className={styles.newChat}
+          onClick={() => {
+            newChat()
+            closeMobileSider()
+          }}
+        >
+          <span className={styles.newChatIcon}>
+            <NewChatIcon />
+          </span>
+          {t('newChat')}
+        </button>
+      )}
       <div className={styles.listWrap}>
         <div className={styles.list}>
           {groups.map((group) => (
@@ -84,7 +159,11 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
                   key={session.id}
                   session={session}
                   active={session.id === activeId}
+                  selectionMode={selectionMode}
+                  selected={selectedIds.has(session.id)}
                   onDelete={() => setDeleting(session)}
+                  onToggleSelect={() => toggleSelected(session.id)}
+                  onEnterSelection={() => enterSelection(session.id)}
                 />
               ))}
             </div>
@@ -92,12 +171,26 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         </div>
       </div>
       <div className={styles.bottom}>
-        <button type="button" className={styles.settings} onClick={() => openSettings('general')}>
-          <span className={styles.settingsIcon}>
-            <IconSettingsOutline16 />
-          </span>
-          <span className={styles.settingsLabel}>{t('settings')}</span>
-        </button>
+        {selectionMode ? (
+          <button
+            type="button"
+            className={styles.deleteSelected}
+            disabled={selectedIds.size === 0 || selectionPending}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <span className={styles.settingsIcon}>
+              <IconTrashOutline16 />
+            </span>
+            <span className={styles.settingsLabel}>{t('deleteSelected')}</span>
+          </button>
+        ) : (
+          <button type="button" className={styles.settings} onClick={() => openSettings('general')}>
+            <span className={styles.settingsIcon}>
+              <IconSettingsOutline16 />
+            </span>
+            <span className={styles.settingsLabel}>{t('settings')}</span>
+          </button>
+        )}
       </div>
       {deleting ? (
         <Modal
@@ -134,6 +227,32 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           }
         >
           {t('deleteSessionWithFilesDescription')}
+        </Modal>
+      ) : null}
+      {confirmDelete ? (
+        <Modal
+          title={t('deleteSelectedModalTitle')}
+          onClose={() => {
+            if (!selectionPending) {
+              setConfirmDelete(false)
+            }
+          }}
+          footer={
+            <>
+              <Button
+                variant="outlined"
+                disabled={selectionPending}
+                onClick={() => setConfirmDelete(false)}
+              >
+                {t('cancel')}
+              </Button>
+              <Button variant="danger" disabled={selectionPending} onClick={() => void deleteSelected()}>
+                {t('delete')}
+              </Button>
+            </>
+          }
+        >
+          {t('deleteSelectedModalDescription', { count: selectedIds.size })}
         </Modal>
       ) : null}
     </div>

@@ -305,3 +305,50 @@
   from { opacity: 0; transform: translateX(-12px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+
+/* ---- 多选 ---- */
+.selectionTitle {
+  flex: 1;
+  min-width: 0;
+  padding-left: 4px;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.deleteSelected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--dsw-alias-state-error-primary);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.deleteSelected:hover:not(:disabled) {
+  background-color: var(--dsw-alias-interactive-bg-hover-danger);
+}
+
+.deleteSelected:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.deleteSelected svg {
+  width: 16px;
+  height: 16px;
+}

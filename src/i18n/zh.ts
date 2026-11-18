@@ -218,4 +218,9 @@ export const zh = {
   greetingChat2: '欢迎回来，随时开始吧',
   greetingChat3: '你好，我能帮什么忙吗？',
   greetingChat4: '欢迎回来，想从哪里开始？',
+  sessionSelectionCount: '已选择 {count} 个对话',
+  sessionItemMenuSelect: '多选',
+  deleteSelected: '删除所选',
+  deleteSelectedModalTitle: '删除所选对话',
+  deleteSelectedModalDescription: '将删除选中的 {count} 个对话及其附件，此操作无法撤销。',
 } as const

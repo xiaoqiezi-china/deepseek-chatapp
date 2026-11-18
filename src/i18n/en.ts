@@ -227,4 +227,9 @@ export const en = {
   greetingChat2: 'Welcome back, jump right in',
   greetingChat3: 'Hi, what can I help you with?',
   greetingChat4: 'Welcome back, where would you like to start?',
+  sessionSelectionCount: '{count} selected',
+  sessionItemMenuSelect: 'Select',
+  deleteSelected: 'Delete selected',
+  deleteSelectedModalTitle: 'Delete selected chats',
+  deleteSelectedModalDescription: 'This will delete the {count} selected chats and their attachments. This cannot be undone.',
 } satisfies Record<keyof typeof zh, string>
