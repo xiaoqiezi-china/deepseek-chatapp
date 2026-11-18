@@ -26,3 +26,5 @@ android/app/src/main/assets/public/
 undefined/
 *.apk
 *.aab
+.cdp*.png
+.shot-*.png
