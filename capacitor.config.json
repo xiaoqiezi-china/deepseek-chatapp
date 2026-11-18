@@ -1,0 +1,8 @@
+{
+  "appId": "com.deepseek.chatapp",
+  "appName": "DeepSeek",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

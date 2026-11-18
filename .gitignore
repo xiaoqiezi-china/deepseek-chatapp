@@ -18,5 +18,8 @@ data/
 rustup-init.exe
 .webview2-setup.exe
 src-tauri/target/
-capacitor.config.ts
-src/capacitor-bootstrap.ts
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/assets/public/
