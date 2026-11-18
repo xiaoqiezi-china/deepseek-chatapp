@@ -1,5 +1,3 @@
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
-
 /**
  * Capacitor Android 存储注入：网页版与 Tauri 版不生效。
  * 使用 @capacitor/filesystem 的 Directory.Data 读写本地 JSON，不运行 HTTP 服务。
@@ -13,7 +11,8 @@ type CapWindow = Window & {
 const win = typeof window === 'undefined' ? undefined : (window as CapWindow)
 
 if (win?.Capacitor?.isNativePlatform?.()) {
-  const fs = Filesystem
+  // 仅在 Android WebView 中按需加载插件，避免进入网页端主 bundle
+  const { Filesystem: fs, Directory, Encoding } = await import('@capacitor/filesystem')
   const DIR = Directory.Data
   const root = 'chat-data'
   const pathOf = (path: string): string => root + path
@@ -302,3 +301,5 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     return respond(404, { error: 'unknown endpoint' })
   }
 }
+
+export {}

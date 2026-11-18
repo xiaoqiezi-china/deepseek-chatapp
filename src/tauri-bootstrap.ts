@@ -66,3 +66,16 @@ if (internals?.invoke) {
     return toResponse(raw, isFileGet)
   }
 }
+
+// 窗口默认隐藏，首帧渲染后显示，避免启动白屏；兜底 2 秒强制显示。
+let revealed = false
+const reveal = () => {
+  if (revealed) {
+    return
+  }
+  revealed = true
+  void internals?.invoke?.('report_startup', { navMs: Math.round(performance.now()) })
+  void internals?.invoke?.('plugin:window|show', { label: 'main' })
+}
+window.__DSH_REVEAL__ = reveal
+setTimeout(reveal, 2000)

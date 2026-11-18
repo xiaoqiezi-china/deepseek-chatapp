@@ -8,6 +8,8 @@ type StorageFetch = (path: string, init?: RequestInit) => Promise<Response>
 declare global {
   interface Window {
     __DSH_STORAGE_FETCH__?: StorageFetch
+    /** Tauri 桌面端：首帧后显示窗口，避免启动白屏 */
+    __DSH_REVEAL__?: () => void
   }
 }
 

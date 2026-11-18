@@ -4,7 +4,12 @@
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+use std::time::Instant;
 use tauri::Manager;
+
+/// 进程启动时刻，用于测量到首帧的耗时。
+static START: OnceLock<Instant> = OnceLock::new();
 
 fn data_dir(app: &tauri::AppHandle) -> PathBuf {
   app.path().app_data_dir().expect("app data dir").join("data")
@@ -403,15 +408,51 @@ fn ensure_webview2() -> bool {
 fn ensure_webview2() -> bool {
   true
 }
+
+/// 前端首帧渲染完成后回传耗时，写入应用数据目录的 startup.log 供排查。
+#[tauri::command]
+fn report_startup(app: tauri::AppHandle, nav_ms: f64) -> Result<(), String> {
+  let elapsed = START.get().map(|start| start.elapsed().as_millis()).unwrap_or(0);
+  let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+  std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  let line = format!("process={}ms page={}ms\n", elapsed, nav_ms);
+  use std::io::Write;
+  let mut file = std::fs::OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(dir.join("startup.log"))
+    .map_err(|e| e.to_string())?;
+  file.write_all(line.as_bytes()).map_err(|e| e.to_string())
+}
+
+
+/// 启动阶段提升进程优先级，缩短 WebView2 初始化与首帧渲染时间。
+#[cfg(windows)]
+fn boost_startup_priority() {
+  use windows_sys::Win32::System::Threading::{
+    GetCurrentProcess, SetPriorityClass, HIGH_PRIORITY_CLASS,
+  };
+  unsafe {
+    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+  }
+}
+
+#[cfg(not(windows))]
+fn boost_startup_priority() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   if !ensure_webview2() {
     std::process::exit(1);
   }
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![storage_request])
+    .invoke_handler(tauri::generate_handler![storage_request, report_startup])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
 
-fn main() { run(); }
+fn main() {
+  START.get_or_init(Instant::now);
+  boost_startup_priority();
+  run();
+}

@@ -4,6 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#ffffff" />
+    <style>
+      /* 首帧前的底色，避免加载期闪白 */
+      html, body { margin: 0; height: 100%; background: #ffffff; }
+      html.__dsh-dark, html.__dsh-dark body { background: #1b1c1f; }
+    </style>
+    <script>
+      // 启动早期按系统主题预置底色，React 渲染后再由应用主题接管
+      try {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('__dsh-dark')
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#1b1c1f')
+        }
+      } catch (e) {}
+    </script>
     <title>DeepSeek</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
