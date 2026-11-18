@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ChatModel } from './api/types.js'
+import { storageFetch } from './storage/bridge.js'
 import type { TtsVoice } from './api/speech.js'
 import { normalizeLocation, type UserLocation } from './location.js'
 
@@ -77,7 +78,7 @@ const sanitize = (raw: Record<string, unknown> | null): Settings => {
 }
 
 const persist = () => {
-  void fetch('/api/settings', {
+  void storageFetch('/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(useSettings.getState()),
@@ -94,7 +95,7 @@ export const initSettings = async (): Promise<void> => {
   if (initialized) { return }
   initialized = true
   try {
-    const response = await fetch('/api/settings')
+    const response = await storageFetch('/settings')
     if (!response.ok) { throw new Error('status ' + response.status) }
     useSettings.setState(sanitize((await response.json()) as Record<string, unknown>))
   } catch (error) {

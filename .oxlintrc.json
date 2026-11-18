@@ -137,6 +137,14 @@
         "no-console": "off",
         "curly": "off"
       }
+    },
+    {
+      "files": [
+        "src/capacitor-bootstrap.ts"
+      ],
+      "rules": {
+        "typescript/no-explicit-any": "off"
+      }
     }
   ]
 }

@@ -1,4 +1,5 @@
 import type { Session, SessionSummary } from './types.js'
+import { storageFetch } from '../storage/bridge.js'
 
 /** 与后端约定：附件原件按本地 id 存储，所有引用共用一份。 */
 export type StoredFile = {
@@ -7,7 +8,7 @@ export type StoredFile = {
 }
 
 const jsonRequest = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch('/api' + path, {
+  const response = await storageFetch(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   })
@@ -32,7 +33,7 @@ export const loadSessionSummaries = (): Promise<SessionSummary[]> =>
   jsonRequest<SessionSummary[]>('/sessions')
 
 export const loadSession = async (id: string): Promise<Session | undefined> => {
-  const response = await fetch('/api/sessions/' + encodeURIComponent(id))
+  const response = await storageFetch('/sessions/' + encodeURIComponent(id))
   if (response.status === 404) { return undefined }
   if (!response.ok) { throw new Error('load session failed: ' + response.status) }
   return (await response.json()) as Session
@@ -65,7 +66,7 @@ export const deleteSession = async (sessionId: string): Promise<void> => {
 }
 
 const putFile = async (path: string, file: StoredFile): Promise<void> => {
-  const response = await fetch('/api' + path, {
+  const response = await storageFetch(path, {
     method: 'PUT',
     headers: { 'Content-Type': file.blob.type || 'application/octet-stream' },
     body: file.blob,
@@ -80,7 +81,7 @@ export const saveFiles = async (files: StoredFile[]): Promise<void> => {
 }
 
 export const loadFile = async (id: string): Promise<Blob | undefined> => {
-  const response = await fetch('/api/files/' + encodeURIComponent(id))
+  const response = await storageFetch('/files/' + encodeURIComponent(id))
   if (response.status === 404) { return undefined }
   if (!response.ok) { throw new Error('load file failed: ' + response.status) }
   const type = response.headers.get('content-type') ?? 'application/octet-stream'

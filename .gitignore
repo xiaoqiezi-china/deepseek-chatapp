@@ -12,3 +12,11 @@ tmp/
 data/
 .local/
 *.zip
+.build-bin/
+.build-tauri.bat
+.tauri-build.log
+rustup-init.exe
+.webview2-setup.exe
+src-tauri/target/
+capacitor.config.ts
+src/capacitor-bootstrap.ts

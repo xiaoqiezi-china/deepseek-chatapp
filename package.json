@@ -13,7 +13,9 @@
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "type": "tsc -p tsconfig.json",
     "lint": "oxlint src server rspack.config.ts",
-    "format": "oxfmt --write ."
+    "format": "oxfmt --write .",
+    "cap:sync": "pnpm build && cap sync android",
+    "apk:build": "pnpm cap:sync && cd android && gradlew assembleDebug"
   },
   "dependencies": {
     "@types/katex": "^0.16.5",
@@ -37,16 +39,22 @@
     "zustand": "4.4.7"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.6.10",
+    "@capacitor/cli": "^7.6.10",
+    "@capacitor/core": "^7.6.10",
+    "@capacitor/filesystem": "^7.1.9",
     "@rspack/cli": "2.0.2",
     "@rspack/core": "2.0.2",
     "@rspack/dev-server": "2.0.1",
     "@swc/helpers": "0.5.23",
+    "@tauri-apps/api": "^2.12.5",
+    "@tauri-apps/cli": "^2.12.5",
     "@types/node": "~20.9.2",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
     "oxfmt": "0.48.0",
     "oxlint": "1.63.0",
-    "typescript": "7.0.2",
-    "cross-env": "^7.0.3",
-    "concurrently": "^9.1.2",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "typescript": "7.0.2"
   }
 }
