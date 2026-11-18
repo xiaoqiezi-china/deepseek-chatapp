@@ -37,6 +37,12 @@
     "copyright": "Copyright (c) 2026 DeepSeek",
     "category": "Productivity",
     "shortDescription": "DeepSeek Chat App",
-    "longDescription": "Chat client based on DeepSeek chat-demo"
+    "longDescription": "Chat client based on DeepSeek chat-demo",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      }
+    }
   }
 }

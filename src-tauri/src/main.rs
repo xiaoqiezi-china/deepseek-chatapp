@@ -292,8 +292,122 @@ fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
   Ok(out)
 }
 
+
+/// WebView2 运行时官网下载地址。
+const WEBVIEW2_URL: &str = "https://developer.microsoft.com/microsoft-edge/webview2/";
+
+/// 读取注册表判断 WebView2 运行时是否已安装且版本有效。
+/// 与 Edge 自身的检测逻辑一致：任一处 Client 键下的 pv 值存在即视为可用。
+#[cfg(windows)]
+fn webview2_available() -> bool {
+  use std::ffi::OsStr;
+  use std::os::windows::ffi::OsStrExt;
+  use windows_sys::Win32::System::Registry::{
+    RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE,
+    KEY_READ,
+  };
+
+  // WebView2 可能按机器、按用户或 32/64 位分别注册。
+  const KEYS: [(&str, HKEY); 4] = [
+    (
+      r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+      HKEY_LOCAL_MACHINE,
+    ),
+    (
+      r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+      HKEY_LOCAL_MACHINE,
+    ),
+    (
+      r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+      HKEY_CURRENT_USER,
+    ),
+    (
+      r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+      HKEY_CURRENT_USER,
+    ),
+  ];
+
+  let wide = |s: &str| -> Vec<u16> { OsStr::new(s).encode_wide().chain(Some(0)).collect() };
+
+  for (key_path, root) in KEYS {
+    let subkey = wide(key_path);
+    let mut handle: HKEY = 0;
+    if unsafe { RegOpenKeyExW(root, subkey.as_ptr(), 0, KEY_READ, &mut handle) } != 0 {
+      continue;
+    }
+    let value_name = wide("pv");
+    let mut kind: u32 = 0;
+    let mut size: u32 = 0;
+    // 先查长度
+    let rc = unsafe {
+      RegQueryValueExW(
+        handle,
+        value_name.as_ptr(),
+        std::ptr::null_mut(),
+        &mut kind,
+        std::ptr::null_mut(),
+        &mut size,
+      )
+    };
+    let found = rc == 0 && size > 0;
+    unsafe { RegCloseKey(handle) };
+    if found {
+      return true;
+    }
+  }
+  false
+}
+
+#[cfg(not(windows))]
+fn webview2_available() -> bool {
+  true
+}
+
+/// 弹出阻断式提示并引导安装 WebView2，返回是否继续启动。
+#[cfg(windows)]
+fn ensure_webview2() -> bool {
+  use windows_sys::Win32::UI::WindowsAndMessaging::{
+    MessageBoxW, MB_ICONERROR, MB_YESNO, IDYES,
+  };
+
+  if webview2_available() {
+    return true;
+  }
+
+  let text = "本程序基于 WebView2 支持库启动。\n\n当前系统 WebView2 运行时缺失或损坏，程序无法显示界面。\n\n点击「是」打开官方下载页面，安装完成后重新运行本程序。";
+  let caption = "缺少 WebView2 运行时";
+
+  let to_wide = |s: &str| -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
+  };
+
+  let result = unsafe {
+    MessageBoxW(
+      0,
+      to_wide(text).as_ptr(),
+      to_wide(caption).as_ptr(),
+      MB_YESNO | MB_ICONERROR,
+    )
+  };
+
+  if result == IDYES {
+    // 用默认浏览器打开官网；失败也不阻塞退出。
+    let _ = std::process::Command::new("cmd")
+      .args(["/C", "start", "", WEBVIEW2_URL])
+      .spawn();
+  }
+  false
+}
+
+#[cfg(not(windows))]
+fn ensure_webview2() -> bool {
+  true
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  if !ensure_webview2() {
+    std::process::exit(1);
+  }
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![storage_request])
     .run(tauri::generate_context!())
