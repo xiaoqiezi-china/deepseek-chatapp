@@ -1,6 +1,6 @@
 [package]
 name = "deepseek-chat-app"
-version = "0.1.0"
+version = "1.0.0"
 description = "Deepseek CE"
 edition = "2021"
 
