@@ -232,4 +232,5 @@ export const en = {
   deleteSelected: 'Delete selected',
   deleteSelectedModalTitle: 'Delete selected chats',
   deleteSelectedModalDescription: 'This will delete the {count} selected chats and their attachments. This cannot be undone.',
+  systemPromptBuiltIn: 'Deepseek Community Edition · based on Chat-Demo',
 } satisfies Record<keyof typeof zh, string>

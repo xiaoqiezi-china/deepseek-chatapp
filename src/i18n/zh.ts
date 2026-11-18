@@ -223,4 +223,5 @@ export const zh = {
   deleteSelected: '删除所选',
   deleteSelectedModalTitle: '删除所选对话',
   deleteSelectedModalDescription: '将删除选中的 {count} 个对话及其附件，此操作无法撤销。',
+  systemPromptBuiltIn: 'Deepseek 社区版本 基于Chat-Demo',
 } as const

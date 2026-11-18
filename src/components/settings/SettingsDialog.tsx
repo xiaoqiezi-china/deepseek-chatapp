@@ -32,9 +32,7 @@ import { classifyApiError } from '../../services/api/errors.js'
 import { DeepSeekWhaleIcon } from '../base/icons.js'
 import { IconAccountOutline16 } from '../base/icons.js'
 import { openAccountDialog } from '../account/accountState.js'
-import {
-  DEFAULT_SYSTEM_PROMPT,
-  setSystemPrompt,
+import {  setSystemPrompt,
   setSystemPromptMode,
   setModel,
   useSettings,
@@ -610,7 +608,7 @@ const SystemPromptSetting = () => {
           </div>
         </>
       ) : (
-        <div className={styles.systemPromptDefaultText}>{DEFAULT_SYSTEM_PROMPT}</div>
+        <div className={styles.systemPromptDefaultText}>{t('systemPromptBuiltIn')}</div>
       )}
     </div>
   )

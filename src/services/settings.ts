@@ -12,6 +12,7 @@ export type ThemePreference = 'light' | 'dark' | 'system'
 /** 系统提示词模式：默认（官方身份）/ 自定义（内容为空即不发送 system） */
 export type SystemPromptMode = 'default' | 'custom'
 
+/** 默认系统提示词：实际随请求发送；设置界面只展示社区版标识文案，不展示原文。 */
 export const DEFAULT_SYSTEM_PROMPT = '你是运行在DeepseekCE上的智能助手，完成用户的任务。'
 
 /** 本机设置，持久化到后端本地 JSON 文件。 */
