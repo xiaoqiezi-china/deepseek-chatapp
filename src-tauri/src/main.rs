@@ -243,6 +243,14 @@ fn storage_request(app: tauri::AppHandle, method: String, path: String, body: Op
     return Ok(resp(200, Value::Array(public)));
   }
 
+  // 在资源管理器中打开数据目录
+  if path == "/open-data-dir" && method == "POST" {
+    let dir = data_dir(&app);
+    let _ = fs::create_dir_all(&dir);
+    let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+    return Ok(resp(200, json!({"ok": true})));
+  }
+
   // clear history
   if path == "/history/clear" && method == "POST" {
     let _ = fs::remove_dir_all(dir.join("sessions"));

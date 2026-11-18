@@ -27,6 +27,8 @@ import {
 } from '../../services/settings.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
+import { IconFolderOutline16 } from '../base/icons.js'
+import { storageFetch } from '../../services/storage/bridge.js'
 import { getBalance, getModels, type BalanceInfo, type ModelInfo } from '../../services/api/client.js'
 import { classifyApiError } from '../../services/api/errors.js'
 import { DeepSeekWhaleIcon } from '../base/icons.js'
@@ -113,6 +115,7 @@ const SettingsContent = () => {
             <>
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
+              <OpenDataDir />
               <SettingCell
                 label={t('deleteAllSessions')}
                 status={null}
@@ -713,6 +716,44 @@ const ModelSetting = () => {
           ]}
           onChange={(next) => setModel(next === 'deepseek-v4-pro' ? 'deepseek-v4-pro' : 'deepseek-flash')}
         />
+      }
+    />
+  )
+}
+
+/** 打开本地数据目录：网页版由本地服务调用系统文件管理器，桌面版走 Tauri 命令。 */
+const OpenDataDir = () => {
+  const t = useTranslate()
+  const [busy, setBusy] = useState(false)
+  const onOpen = async () => {
+    setBusy(true)
+    try {
+      const response = await storageFetch('/open-data-dir', { method: 'POST' })
+      if (!response.ok) {
+        throw new Error('status ' + response.status)
+      }
+    } catch {
+      showToast({ key: 'openDataDirFailed', type: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <SettingCell
+      label={t('openDataDir')}
+      description={t('openDataDirDescription')}
+      status={null}
+      action={
+        <Button
+          variant="outlined"
+          size="m"
+          className={styles.cellButton}
+          disabled={busy}
+          onClick={() => void onOpen()}
+        >
+          <IconFolderOutline16 />
+          {t('open')}
+        </Button>
       }
     />
   )

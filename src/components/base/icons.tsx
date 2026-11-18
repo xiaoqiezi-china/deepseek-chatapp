@@ -545,3 +545,16 @@ export const IconMultiSelectOutline16 = () => (
     </g>
   </svg>
 )
+
+/** 文件夹图标，用于打开数据目录 */
+export const IconFolderOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M1.5 3.5C1.5 2.94772 1.94772 2.5 2.5 2.5H6.08579C6.21839 2.5 6.34557 2.55268 6.43934 2.64645L7.85355 4.06066C7.94733 4.15443 8.0745 4.20711 8.20711 4.20711H13.5C14.0523 4.20711 14.5 4.65482 14.5 5.20711V12.5C14.5 13.0523 14.0523 13.5 13.5 13.5H2.5C1.94772 13.5 1.5 13.0523 1.5 12.5V3.5Z"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+    />
+    <path d="M1.5 6.5H14.5" stroke="currentColor" strokeWidth="1.2" opacity="0.5" />
+  </svg>
+)

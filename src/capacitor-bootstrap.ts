@@ -293,6 +293,11 @@ if (win?.Capacitor?.isNativePlatform?.()) {
       return respond(200, summaries.map(publicSummary))
     }
 
+    if (path === '/open-data-dir' && method === 'POST') {
+      // Android 应用私有目录无法用系统文件管理器打开
+      return respond(501, { error: 'unsupported' })
+    }
+
     if (path === '/history/clear' && method === 'POST') {
       await writeJson(pathOf('/summaries.json'), [])
       return respond(200, { ok: true })

@@ -224,4 +224,8 @@ export const zh = {
   deleteSelectedModalTitle: '删除所选对话',
   deleteSelectedModalDescription: '将删除选中的 {count} 个对话及其附件，此操作无法撤销。',
   systemPromptBuiltIn: 'Deepseek 社区版本 基于Chat-Demo',
+  openDataDir: '打开数据目录',
+  openDataDirDescription: '在文件管理器中查看会话、附件和设置文件',
+  openDataDirFailed: '无法打开数据目录',
+  open: '打开',
 } as const

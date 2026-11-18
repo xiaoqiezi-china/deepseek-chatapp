@@ -1,5 +1,6 @@
 import http from 'node:http'
 import * as fsp from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as store from './store.js'
@@ -167,6 +168,14 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
 
     // Clear all history
     if (p === '/history/clear' && method === 'POST') { await store.clearHistory(); return sendJson(res, 200, { ok: true }) }
+
+    // 在系统文件管理器中打开数据目录（只允许打开固定的 data 目录）
+    if (p === '/open-data-dir' && method === 'POST') {
+      await fsp.mkdir(store.DATA_DIR, { recursive: true })
+      const opener = process.platform === 'win32' ? 'explorer' : process.platform === 'darwin' ? 'open' : 'xdg-open'
+      spawn(opener, [store.DATA_DIR], { detached: true, stdio: 'ignore' }).unref()
+      return sendJson(res, 200, { ok: true })
+    }
 
     sendJson(res, 404, { error: 'Unknown endpoint', path: p })
   } catch (error) {

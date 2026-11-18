@@ -233,4 +233,8 @@ export const en = {
   deleteSelectedModalTitle: 'Delete selected chats',
   deleteSelectedModalDescription: 'This will delete the {count} selected chats and their attachments. This cannot be undone.',
   systemPromptBuiltIn: 'Deepseek Community Edition · based on Chat-Demo',
+  openDataDir: 'Open data folder',
+  openDataDirDescription: 'View chats, attachments and settings in your file manager',
+  openDataDirFailed: 'Failed to open data folder',
+  open: 'Open',
 } satisfies Record<keyof typeof zh, string>
