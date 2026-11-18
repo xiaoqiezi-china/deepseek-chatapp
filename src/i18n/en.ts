@@ -245,4 +245,5 @@ export const en = {
   updateDownloading: 'Downloading {percent}%',
   updateFailed: 'Failed to check for updates. Try again later.',
   updateInstall: 'Download & install',
+  updateDownloadingGeneric: 'Downloading update…',
 } satisfies Record<keyof typeof zh, string>

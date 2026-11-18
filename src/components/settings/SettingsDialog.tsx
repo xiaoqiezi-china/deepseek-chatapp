@@ -29,7 +29,7 @@ import { useTranslate, type TranslationKey, type TranslationMessage } from '../.
 import { Button } from '../base/Button.js'
 import { IconFolderOutline16 } from '../base/icons.js'
 import { isCapacitorNative, storageFetch } from '../../services/storage/bridge.js'
-import { checkForUpdate, downloadAndInstallUpdate, isUpdaterSupported } from '../../services/updater.js'
+import { checkForUpdate, installUpdate, isUpdaterSupported } from '../../services/updater.js'
 import { getBalance, getModels, type BalanceInfo, type ModelInfo } from '../../services/api/client.js'
 import { classifyApiError } from '../../services/api/errors.js'
 import { DeepSeekWhaleIcon } from '../base/icons.js'
@@ -772,7 +772,8 @@ const UpdateSetting = () => {
   const t = useTranslate()
   const [state, setState] = useState<UpdateState>('idle')
   const [version, setVersion] = useState('')
-  const [percent, setPercent] = useState(0)
+  const [downloadUrl, setDownloadUrl] = useState('')
+  const [percent, setPercent] = useState(-1)
 
   if (!isUpdaterSupported()) {
     return null
@@ -784,6 +785,7 @@ const UpdateSetting = () => {
       const result = await checkForUpdate()
       if (result.status === 'available') {
         setVersion(result.version)
+        setDownloadUrl(result.downloadUrl)
         setState('available')
       } else {
         setState('latest')
@@ -794,10 +796,10 @@ const UpdateSetting = () => {
   }
 
   const install = async () => {
-    setPercent(0)
+    setPercent(-1)
     setState('downloading')
     try {
-      await downloadAndInstallUpdate(setPercent)
+      await installUpdate(downloadUrl, setPercent)
     } catch {
       setState('error')
     }
@@ -811,7 +813,9 @@ const UpdateSetting = () => {
         : state === 'available'
           ? { key: 'updateAvailable' as const, params: { version } }
           : state === 'downloading'
-            ? { key: 'updateDownloading' as const, params: { percent } }
+            ? percent >= 0
+              ? { key: 'updateDownloading' as const, params: { percent } }
+              : { key: 'updateDownloadingGeneric' as const }
             : state === 'error'
               ? { key: 'updateFailed' as const, error: true }
               : null

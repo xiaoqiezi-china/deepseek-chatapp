@@ -236,4 +236,5 @@ export const zh = {
   updateDownloading: '正在下载 {percent}%',
   updateFailed: '检查更新失败，请稍后再试',
   updateInstall: '下载并安装',
+  updateDownloadingGeneric: '正在下载更新…',
 } as const
