@@ -19,6 +19,7 @@ import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { AccountDialog } from '../components/account/AccountDialog.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
+import { checkForUpdate, isUpdaterSupported } from '../services/updater.js'
 import { onUploadNotice } from '../services/attachments.js'
 import { Button } from '../components/base/Button.js'
 import { stopReadAloud } from '../services/speech/readAloud.js'
@@ -67,6 +68,23 @@ export const App = () => {
   useEffect(stopReadAloud, [activeId])
   // 移动端选中会话、切换布局后收起抽屉
   useEffect(closeMobileSider, [activeId, isMobile])
+
+  // 桌面端启动后静默检查更新，有新版时提示去设置里更新
+  useEffect(() => {
+    if (!isUpdaterSupported()) {
+      return
+    }
+    const timer = setTimeout(() => {
+      void checkForUpdate()
+        .then((result) => {
+          if (result.status === 'available') {
+            showToast({ key: 'updateAvailable', params: { version: result.version } })
+          }
+        })
+        .catch(() => {})
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     void initChat()

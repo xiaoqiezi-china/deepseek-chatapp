@@ -29,6 +29,7 @@ import { useTranslate, type TranslationKey, type TranslationMessage } from '../.
 import { Button } from '../base/Button.js'
 import { IconFolderOutline16 } from '../base/icons.js'
 import { isCapacitorNative, storageFetch } from '../../services/storage/bridge.js'
+import { checkForUpdate, downloadAndInstallUpdate, isUpdaterSupported } from '../../services/updater.js'
 import { getBalance, getModels, type BalanceInfo, type ModelInfo } from '../../services/api/client.js'
 import { classifyApiError } from '../../services/api/errors.js'
 import { DeepSeekWhaleIcon } from '../base/icons.js'
@@ -109,6 +110,7 @@ const SettingsContent = () => {
               <TtsVoiceSetting />
               <LocationSetting />
               <ModelSetting />
+              <UpdateSetting />
               <SystemPromptSetting />
             </>
           ) : section === 'data' ? (
@@ -758,6 +760,83 @@ const OpenDataDir = () => {
           <IconFolderOutline16 />
           {t('open')}
         </Button>
+      }
+    />
+  )
+}
+
+/** 检查更新：仅桌面端可用，从 GitHub Releases 拉取最新版本 */
+type UpdateState = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'error'
+
+const UpdateSetting = () => {
+  const t = useTranslate()
+  const [state, setState] = useState<UpdateState>('idle')
+  const [version, setVersion] = useState('')
+  const [percent, setPercent] = useState(0)
+
+  if (!isUpdaterSupported()) {
+    return null
+  }
+
+  const check = async () => {
+    setState('checking')
+    try {
+      const result = await checkForUpdate()
+      if (result.status === 'available') {
+        setVersion(result.version)
+        setState('available')
+      } else {
+        setState('latest')
+      }
+    } catch {
+      setState('error')
+    }
+  }
+
+  const install = async () => {
+    setPercent(0)
+    setState('downloading')
+    try {
+      await downloadAndInstallUpdate(setPercent)
+    } catch {
+      setState('error')
+    }
+  }
+
+  const status: Status =
+    state === 'checking'
+      ? { key: 'updateChecking' as const }
+      : state === 'latest'
+        ? { key: 'updateLatest' as const }
+        : state === 'available'
+          ? { key: 'updateAvailable' as const, params: { version } }
+          : state === 'downloading'
+            ? { key: 'updateDownloading' as const, params: { percent } }
+            : state === 'error'
+              ? { key: 'updateFailed' as const, error: true }
+              : null
+
+  return (
+    <SettingCell
+      label={t('checkUpdate')}
+      description={t('checkUpdateDescription')}
+      status={status}
+      action={
+        state === 'available' ? (
+          <Button size="m" className={styles.cellButton} onClick={() => void install()}>
+            {t('updateInstall')}
+          </Button>
+        ) : (
+          <Button
+            variant="outlined"
+            size="m"
+            className={styles.cellButton}
+            disabled={state === 'checking' || state === 'downloading'}
+            onClick={() => void check()}
+          >
+            {t('checkUpdate')}
+          </Button>
+        )
       }
     />
   )

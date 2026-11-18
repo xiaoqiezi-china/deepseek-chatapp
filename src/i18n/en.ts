@@ -237,4 +237,12 @@ export const en = {
   openDataDirDescription: 'View chats, attachments and settings in your file manager',
   openDataDirFailed: 'Failed to open data folder',
   open: 'Open',
+  checkUpdate: 'Check for updates',
+  checkUpdateDescription: 'Fetch the latest version from GitHub',
+  updateChecking: 'Checking…',
+  updateLatest: "You're up to date",
+  updateAvailable: 'New version {version} available, update in Settings',
+  updateDownloading: 'Downloading {percent}%',
+  updateFailed: 'Failed to check for updates. Try again later.',
+  updateInstall: 'Download & install',
 } satisfies Record<keyof typeof zh, string>

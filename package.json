@@ -15,9 +15,12 @@
     "lint": "oxlint src server rspack.config.ts",
     "format": "oxfmt --write .",
     "cap:sync": "pnpm build && cap sync android",
-    "apk:build": "pnpm cap:sync && cd android && gradlew assembleDebug"
+    "apk:build": "pnpm cap:sync && cd android && gradlew assembleDebug",
+    "release:desktop": "node scripts/publish-release.mjs"
   },
   "dependencies": {
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "@types/katex": "^0.16.5",
     "@types/mdast": "~4.0.3",
     "@types/prismjs": "^1.26.1",

@@ -50,3 +50,28 @@ Gradle 首次构建需要下载发行包（约 219 MB），国内网络可先通
 ## 说明
 
 桌面端与 APK 都不运行 `server/`。应用直接通过 Tauri IPC 或 Capacitor Filesystem 读写与应用数据目录中 `data/` 相同结构的数据。
+
+
+## 发布桌面端更新
+
+应用启动 5 秒后会静默检查更新，设置 → 通用设置里也有「检查更新」。更新源是 GitHub Releases 的 `latest.json`。
+
+发版流程：
+
+1. 修改 `src-tauri/tauri.conf.json` 的 `version`（以及 `Cargo.toml`、`package.json` 保持一致）
+2. 构建（必须带签名，否则 updater 无法校验）：
+
+```sh
+export TAURI_SIGNING_PRIVATE_KEY=<私钥文件路径>
+pnpm tauri build
+```
+
+3. 发布到 GitHub Releases：
+
+```sh
+pnpm release:desktop v0.1.1 "本次更新说明"
+```
+
+脚本会读取 `src-tauri/target/release/bundle/nsis/` 下的安装包与签名，生成 `latest.json` 并上传到对应的 Release。
+
+私钥保存在 `~/.tauri/deepseek-ce.key`，**不要提交到仓库**；丢失后已发布的版本将无法接收更新。

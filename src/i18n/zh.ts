@@ -228,4 +228,12 @@ export const zh = {
   openDataDirDescription: '在文件管理器中查看会话、附件和设置文件',
   openDataDirFailed: '无法打开数据目录',
   open: '打开',
+  checkUpdate: '检查更新',
+  checkUpdateDescription: '从 GitHub 获取最新版本',
+  updateChecking: '正在检查…',
+  updateLatest: '已是最新版本',
+  updateAvailable: '发现新版本 {version}，可在设置中更新',
+  updateDownloading: '正在下载 {percent}%',
+  updateFailed: '检查更新失败，请稍后再试',
+  updateInstall: '下载并安装',
 } as const

@@ -454,6 +454,8 @@ pub fn run() {
     std::process::exit(1);
   }
   tauri::Builder::default()
+    .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_process::init())
     .invoke_handler(tauri::generate_handler![storage_request, report_startup])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
