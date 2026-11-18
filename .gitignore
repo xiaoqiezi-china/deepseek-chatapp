@@ -24,3 +24,5 @@ android/.gradle/
 android/local.properties
 android/app/src/main/assets/public/
 undefined/
+*.apk
+*.aab

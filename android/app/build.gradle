@@ -18,7 +18,10 @@ android {
     }
     buildTypes {
         release {
+            // 社区版直接用 debug 签名，方便本地安装测试
+            signingConfig signingConfigs.debug
             minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
