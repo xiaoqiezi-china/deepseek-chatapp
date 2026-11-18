@@ -1,3 +1,6 @@
+// release 构建以 Windows 子系统运行，不弹出控制台窗口
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
