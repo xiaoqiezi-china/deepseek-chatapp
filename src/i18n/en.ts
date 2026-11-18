@@ -223,4 +223,8 @@ export const en = {
   greetingAfternoon: 'Good afternoon, what can I help you with?',
   greetingEvening: 'Good evening, what can I help you with?',
   settingsModel: 'Model',
+  greetingChat1: "Hi, let's start chatting",
+  greetingChat2: 'Welcome back, jump right in',
+  greetingChat3: 'Hi, what can I help you with?',
+  greetingChat4: 'Welcome back, where would you like to start?',
 } satisfies Record<keyof typeof zh, string>

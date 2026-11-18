@@ -16,11 +16,18 @@ export type MenuOption = {
 export const Menu = ({
   options,
   children,
+  onOpenChange,
 }: {
   options: MenuOption[]
   children: (props: { open: boolean; toggle: () => void }) => ReactNode
+  /** 打开状态变化时通知调用方，用于在菜单打开期间保持触发元素可见 */
+  onOpenChange?: (open: boolean) => void
 }) => {
-  const [open, setOpen] = useState(false)
+  const [open, setOpenState] = useState(false)
+  const setOpen = (next: boolean) => {
+    setOpenState(next)
+    onOpenChange?.(next)
+  }
   const close = () => setOpen(false)
   // 左侧对齐并再左移 5px，让菜单文字与触发元素图标对齐
   const { anchorRef, floatingRef, position } = useAnchoredPosition<HTMLSpanElement, HTMLDivElement>(
@@ -32,7 +39,7 @@ export const Menu = ({
   return (
     <>
       <span ref={anchorRef} className={styles.anchor}>
-        {children({ open, toggle: () => setOpen((value) => !value) })}
+        {children({ open, toggle: () => setOpen(!open) })}
       </span>
       {open
         ? createPortal(

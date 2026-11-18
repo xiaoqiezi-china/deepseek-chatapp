@@ -22,7 +22,8 @@
     }
 
     &:hover,
-    &.active {
+    &.active,
+    &.menuOpen {
       .action {
         display: flex;
       }

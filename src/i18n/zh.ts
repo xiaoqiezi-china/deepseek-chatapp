@@ -214,4 +214,8 @@ export const zh = {
   greetingAfternoon: '下午好，今天想做点什么？',
   greetingEvening: '晚上好，今天想做点什么？',
   settingsModel: '模型',
+  greetingChat1: '你好，让我们开始聊天吧',
+  greetingChat2: '欢迎回来，随时开始吧',
+  greetingChat3: '你好，我能帮什么忙吗？',
+  greetingChat4: '欢迎回来，想从哪里开始？',
 } as const
