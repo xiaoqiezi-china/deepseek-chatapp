@@ -108,32 +108,29 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   return (
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
       <div className={styles.top}>
-        {selectionMode ? (
-          <>
-            <div className={styles.selectionTitle}>
-              {t('sessionSelectionCount', { count: selectedIds.size })}
-            </div>
-            <IconButton
-              size="m"
-              icon={<IconCloseOutline16 />}
-              tooltip={t('cancel')}
-              tooltipPlacement="bottom"
-              onClick={exitSelection}
-            />
-          </>
-        ) : (
-          <>
-            <div className={styles.appName}><DeepSeekTitleIcon /></div>
-            <IconButton
-              size="m"
-              icon={<IconPanelLeftOutline16 />}
-              tooltip={t('collapseSiderbarButton')}
-              tooltipPlacement="bottom"
-              onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
-            />
-          </>
-        )}
+        <div className={styles.appName}><DeepSeekTitleIcon /></div>
+        <IconButton
+          size="m"
+          icon={<IconPanelLeftOutline16 />}
+          tooltip={t('collapseSiderbarButton')}
+          tooltipPlacement="bottom"
+          onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
+        />
       </div>
+      {selectionMode ? (
+        <div className={styles.selectionBar}>
+          <div className={styles.selectionTitle}>
+            {t('sessionSelectionCount', { count: selectedIds.size })}
+          </div>
+          <IconButton
+            size="m"
+            icon={<IconCloseOutline16 />}
+            tooltip={t('cancel')}
+            tooltipPlacement="bottom"
+            onClick={exitSelection}
+          />
+        </div>
+      ) : null}
       {selectionMode ? null : (
         <button
           type="button"

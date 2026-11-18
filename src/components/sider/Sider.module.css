@@ -308,6 +308,24 @@
 
 
 /* ---- 多选 ---- */
+.selectionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 40px;
+  margin-bottom: 12px;
+  padding: 4px 2px 4px 4px;
+  flex-shrink: 0;
+  animation: selectionBarIn 0.2s var(--ds-ease-in-out) both;
+}
+
+@keyframes selectionBarIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .selectionTitle {
   flex: 1;
   min-width: 0;
