@@ -27,7 +27,7 @@ import {
 } from '../../services/settings.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
-import { IconFolderOutline16 } from '../base/icons.js'
+import { IconFolderOutline16, IconInfoOutline16 } from '../base/icons.js'
 import { isCapacitorNative, storageFetch } from '../../services/storage/bridge.js'
 import { checkForUpdate, installUpdate, isUpdaterSupported } from '../../services/updater.js'
 import { getBalance, getModels, type BalanceInfo, type ModelInfo } from '../../services/api/client.js'
@@ -63,6 +63,7 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
   },
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
   { value: 'account', label: 'settingDialogAsideAccountOptionLabel', icon: <IconAccountOutline16 /> },
+  { value: 'about', label: 'settingDialogAsideAboutOptionLabel', icon: <IconInfoOutline16 /> },
 ]
 
 const SettingsContent = () => {
@@ -110,7 +111,6 @@ const SettingsContent = () => {
               <TtsVoiceSetting />
               <LocationSetting />
               <ModelSetting />
-              <UpdateSetting />
               <SystemPromptSetting />
             </>
           ) : section === 'data' ? (
@@ -134,8 +134,10 @@ const SettingsContent = () => {
                 }
               />
             </>
-          ) : (
+          ) : section === 'account' ? (
             <AccountSetting />
+          ) : (
+            <AboutSetting />
           )}
         </div>
       </Modal>
@@ -762,6 +764,18 @@ const OpenDataDir = () => {
         </Button>
       }
     />
+  )
+}
+
+/** 关于：应用名、当前版本与检查更新入口 */
+const AboutSetting = () => {
+  const t = useTranslate()
+  return (
+    <div className={styles.about}>
+      <div className={styles.aboutBrand}>Deepseek CE</div>
+      <div className={styles.aboutVersion}>{t('aboutVersion', { version: __APP_VERSION__ })}</div>
+      <UpdateSetting />
+    </div>
   )
 }
 

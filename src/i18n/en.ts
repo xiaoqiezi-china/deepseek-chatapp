@@ -246,4 +246,6 @@ export const en = {
   updateFailed: 'Failed to check for updates. Try again later.',
   updateInstall: 'Download & install',
   updateDownloadingGeneric: 'Downloading update…',
+  settingDialogAsideAboutOptionLabel: 'About',
+  aboutVersion: 'Version {version}',
 } satisfies Record<keyof typeof zh, string>

@@ -237,4 +237,6 @@ export const zh = {
   updateFailed: '检查更新失败，请稍后再试',
   updateInstall: '下载并安装',
   updateDownloadingGeneric: '正在下载更新…',
+  settingDialogAsideAboutOptionLabel: '关于',
+  aboutVersion: '版本 {version}',
 } as const

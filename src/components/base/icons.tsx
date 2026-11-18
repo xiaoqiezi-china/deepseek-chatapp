@@ -558,3 +558,12 @@ export const IconFolderOutline16 = () => (
     <path d="M1.5 6.5H14.5" stroke="currentColor" strokeWidth="1.2" opacity="0.5" />
   </svg>
 )
+
+/** 信息图标，用于「关于」分组 */
+export const IconInfoOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M8 7.1V11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <circle cx="8" cy="4.9" r="0.85" fill="currentColor" />
+  </svg>
+)
