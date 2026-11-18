@@ -315,7 +315,6 @@
   gap: 8px;
   box-sizing: border-box;
   height: 40px;
-  margin-bottom: 12px;
   padding: 4px 2px 4px 4px;
   flex-shrink: 0;
   animation: selectionBarIn 0.2s var(--ds-ease-in-out) both;
