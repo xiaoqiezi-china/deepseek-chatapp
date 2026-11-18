@@ -303,11 +303,11 @@ export const MobileSider = () => {
   return (
     <>
       <div
-        className={closing ? styles.drawerMaskClosing : styles.drawerMask}
+        className={clsx(styles.drawerMask, closing && styles.drawerMaskClosing)}
         onClick={closeMobileSider}
       />
       <div
-        className={closing ? styles.drawerClosing : styles.drawer}
+        className={clsx(styles.drawer, closing && styles.drawerClosing)}
         style={offset ? { transform: `translateX(${offset}px)` } : undefined}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}

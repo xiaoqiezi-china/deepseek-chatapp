@@ -28,7 +28,7 @@ import {
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
 import { IconFolderOutline16 } from '../base/icons.js'
-import { storageFetch } from '../../services/storage/bridge.js'
+import { isCapacitorNative, storageFetch } from '../../services/storage/bridge.js'
 import { getBalance, getModels, type BalanceInfo, type ModelInfo } from '../../services/api/client.js'
 import { classifyApiError } from '../../services/api/errors.js'
 import { DeepSeekWhaleIcon } from '../base/icons.js'
@@ -725,6 +725,10 @@ const ModelSetting = () => {
 const OpenDataDir = () => {
   const t = useTranslate()
   const [busy, setBusy] = useState(false)
+  // Android 应用私有目录无法用系统文件管理器打开，直接不展示该入口
+  if (isCapacitorNative()) {
+    return null
+  }
   const onOpen = async () => {
     setBusy(true)
     try {

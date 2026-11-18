@@ -28,3 +28,10 @@ export const installStorageFetch = (fn: StorageFetch): void => {
     window.__DSH_STORAGE_FETCH__ = fn
   }
 }
+
+/** 是否运行在 Capacitor 原生容器（Android）中：私有目录无法用系统文件管理器打开。 */
+export const isCapacitorNative = (): boolean => {
+  const capacitor = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } })
+    .Capacitor
+  return capacitor?.isNativePlatform?.() === true
+}
