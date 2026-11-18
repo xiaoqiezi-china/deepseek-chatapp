@@ -13,7 +13,11 @@ export type ThemePreference = 'light' | 'dark' | 'system'
 export type SystemPromptMode = 'default' | 'custom'
 
 /** 默认系统提示词：实际随请求发送；设置界面只展示社区版标识文案，不展示原文。 */
-export const DEFAULT_SYSTEM_PROMPT = '你是运行在DeepseekCE上的智能助手，完成用户的任务。'
+export const DEFAULT_SYSTEM_PROMPT = [
+  '你是DeepseekAI助手。你当前正运行在DeepseekAPP的社区版本上(Deepseek-CE)',
+  '此程序基于deepseek公开的chat-demo二次开发而来。',
+  '与用户交流并完成并协助用户。',
+].join('\n')
 
 /** 本机设置，持久化到后端本地 JSON 文件。 */
 type Settings = {
