@@ -12,7 +12,6 @@ rem Locate Node.js: PATH first, then common install dirs
 set "NODE_EXE="
 where node >nul 2>nul && set "NODE_EXE=node"
 if not defined NODE_EXE if exist "%ProgramFiles%\nodejs\node.exe" set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
-if not defined NODE_EXE if exist "%USERPROFILE%\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe" set "NODE_EXE=%USERPROFILE%\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
 if not defined NODE_EXE goto :no_node
 
 echo Node: %NODE_EXE%
