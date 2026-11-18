@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { ChatModel } from './api/types.js'
 import type { TtsVoice } from './api/speech.js'
 import { normalizeLocation, type UserLocation } from './location.js'
 
@@ -7,7 +8,12 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
+/** 系统提示词模式：默认（官方身份）/ 自定义（内容为空即不发送 system） */
+export type SystemPromptMode = 'default' | 'custom'
+
+export const DEFAULT_SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
+
+/** 本机设置，持久化到后端本地 JSON 文件。 */
 type Settings = {
   apiKey: string | null
   locale: Locale
@@ -17,124 +23,150 @@ type Settings = {
   thinking: boolean
   search: boolean
   siderCollapsed: boolean
+  systemPromptMode: SystemPromptMode
+  systemPrompt: string
+  /** 当前使用的聊天模型，默认 deepseek-flash */
+  model: ChatModel
 }
 
-const KEYS = {
-  apiKey: 'chat-demo:api-key',
-  locale: 'chat-demo:locale',
-  location: 'chat-demo:location',
-  themePreference: 'chat-demo:theme-preference',
-  ttsVoice: 'chat-demo:tts-voice',
-  thinking: 'chat-demo:thinking',
-  search: 'chat-demo:search',
-  siderCollapsed: 'chat-demo:sider-collapsed',
-} as const
-
-const read = (key: string) => {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-
-const write = (key: string, value: string | null) => {
-  try {
-    if (value === null) {
-      localStorage.removeItem(key)
-    } else {
-      localStorage.setItem(key, value)
-    }
-  } catch {
-    // 存储不可用时只在内存中生效
-  }
+/** 默认值：首次启动或在后端不可达时使用。 */
+const defaults: Settings = {
+  apiKey: null,
+  locale: 'zh-CN',
+  themePreference: 'system',
+  location: null,
+  ttsVoice: 'stella',
+  thinking: false,
+  search: false,
+  siderCollapsed: false,
+  systemPromptMode: 'default',
+  systemPrompt: '',
+  model: 'deepseek-flash',
 }
 
 /** 位置选择模式跟随浏览器语言，与应用内选择的界面语言无关。 */
 export const isChineseBrowser = (): boolean =>
   (typeof navigator === 'undefined' ? 'zh' : navigator.language).toLowerCase().startsWith('zh')
 
-const initialLocale = (): Locale => {
-  const saved = read(KEYS.locale)
-  if (saved === 'zh-CN' || saved === 'en-US') {
-    return saved
+/** 从后端读取的设置可能是旧版本格式，逐字段校验回退到默认值。 */
+const sanitize = (raw: Record<string, unknown> | null): Settings => {
+  if (!raw) { return { ...defaults, locale: isChineseBrowser() ? 'zh-CN' : 'en-US' } }
+  const location = normalizeLocation(raw.location ?? null)
+  const browserZh = isChineseBrowser()
+  const normalizedLocation = browserZh
+    ? location?.region === 'CN' && location.province
+      ? location
+      : null
+    : location
+      ? { region: location.region }
+      : null
+  const locale = raw.locale === 'zh-CN' || raw.locale === 'en-US' ? raw.locale : browserZh ? 'zh-CN' : 'en-US'
+  return {
+    apiKey: typeof raw.apiKey === 'string' ? raw.apiKey : null,
+    locale,
+    themePreference: raw.themePreference === 'light' || raw.themePreference === 'dark' ? raw.themePreference : 'system',
+    location: normalizedLocation,
+    ttsVoice: raw.ttsVoice === 'tide' ? 'tide' : 'stella',
+    thinking: raw.thinking === true,
+    search: raw.search === true,
+    siderCollapsed: raw.siderCollapsed === true,
+    systemPromptMode: raw.systemPromptMode === 'custom' ? 'custom' : 'default',
+    systemPrompt: typeof raw.systemPrompt === 'string' ? raw.systemPrompt : '',
+    model: raw.model === 'deepseek-v4-pro' ? 'deepseek-v4-pro' : 'deepseek-flash',
   }
-  return isChineseBrowser() ? 'zh-CN' : 'en-US'
 }
 
-const initialLocation = (): UserLocation | null => {
+const persist = () => {
+  void fetch('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(useSettings.getState()),
+  }).catch((error: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error('[settings] save failed', error)
+  })
+}
+
+let initialized = false
+
+/** 渲染前调用：从后端加载设置；后端不可达时用默认值启动。 */
+export const initSettings = async (): Promise<void> => {
+  if (initialized) { return }
+  initialized = true
   try {
-    const location = normalizeLocation(JSON.parse(read(KEYS.location) ?? 'null'))
-    if (!location) {
-      return null
-    }
-    return isChineseBrowser()
-      ? location.region === 'CN' && location.province
-        ? location
-        : null
-      : { region: location.region }
-  } catch {
-    return null
+    const response = await fetch('/api/settings')
+    if (!response.ok) { throw new Error('status ' + response.status) }
+    useSettings.setState(sanitize((await response.json()) as Record<string, unknown>))
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[settings] load failed, using defaults', error)
   }
 }
-
-/** 未保存过时跟随系统 */
-const initialThemePreference = (): ThemePreference => {
-  const saved = read(KEYS.themePreference)
-  return saved === 'light' || saved === 'dark' ? saved : 'system'
-}
-
-/** 未保存过时使用服务端默认音色 stella（海星） */
-const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
 export const useSettings = create<Settings>(() => ({
-  apiKey: read(KEYS.apiKey),
-  locale: initialLocale(),
-  location: initialLocation(),
-  themePreference: initialThemePreference(),
-  ttsVoice: initialTtsVoice(),
-  thinking: read(KEYS.thinking) === 'true',
-  search: read(KEYS.search) === 'true',
-  siderCollapsed: read(KEYS.siderCollapsed) === 'true',
+  ...defaults,
+  locale: isChineseBrowser() ? 'zh-CN' : 'en-US',
 }))
 
+/** 当前请求应发送的系统提示词；自定义且为空时返回 null（请求中省略 system 字段）。 */
+export const currentSystemPrompt = (): string | null => {
+  const { systemPromptMode, systemPrompt } = useSettings.getState()
+  if (systemPromptMode === 'default') { return DEFAULT_SYSTEM_PROMPT }
+  return systemPrompt.trim() ? systemPrompt.trim() : null
+}
+
 export const setLocale = (locale: Locale) => {
-  write(KEYS.locale, locale)
   useSettings.setState({ locale })
+  persist()
 }
 
 export const setLocation = (value: UserLocation | null) => {
   const location = normalizeLocation(value)
-  write(KEYS.location, location ? JSON.stringify(location) : null)
   useSettings.setState({ location })
+  persist()
 }
 
 export const setThemePreference = (themePreference: ThemePreference) => {
-  write(KEYS.themePreference, themePreference)
   useSettings.setState({ themePreference })
+  persist()
 }
 
 export const setTtsVoice = (ttsVoice: TtsVoice) => {
-  write(KEYS.ttsVoice, ttsVoice)
   useSettings.setState({ ttsVoice })
+  persist()
 }
 
 export const setApiKey = (apiKey: string | null) => {
-  write(KEYS.apiKey, apiKey)
   useSettings.setState({ apiKey })
+  persist()
 }
 
 export const setThinking = (thinking: boolean) => {
-  write(KEYS.thinking, String(thinking))
   useSettings.setState({ thinking })
+  persist()
 }
 
 export const setSearch = (search: boolean) => {
-  write(KEYS.search, String(search))
   useSettings.setState({ search })
+  persist()
 }
 
 export const setSiderCollapsed = (siderCollapsed: boolean) => {
-  write(KEYS.siderCollapsed, String(siderCollapsed))
   useSettings.setState({ siderCollapsed })
+  persist()
+}
+
+export const setSystemPromptMode = (systemPromptMode: SystemPromptMode) => {
+  useSettings.setState({ systemPromptMode })
+  persist()
+}
+
+export const setSystemPrompt = (systemPrompt: string) => {
+  useSettings.setState({ systemPrompt })
+  persist()
+}
+
+export const setModel = (model: ChatModel) => {
+  useSettings.setState({ model })
+  persist()
 }

@@ -1,6 +1,10 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "import", "react"],
+  "plugins": [
+    "typescript",
+    "import",
+    "react"
+  ],
   "categories": {
     "correctness": "off"
   },
@@ -73,7 +77,10 @@
     "import/no-default-export": "error",
     "no-console": "error",
     "import/no-cycle": "error",
-    "curly": ["error", "all"],
+    "curly": [
+      "error",
+      "all"
+    ],
     "no-alert": "error",
     "typescript/ban-ts-comment": [
       "error",
@@ -119,5 +126,17 @@
     "react/no-unknown-property": "error",
     "react/rules-of-hooks": "off",
     "react/exhaustive-deps": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "server/**/*.ts"
+      ],
+      "rules": {
+        "typescript/no-explicit-any": "off",
+        "no-console": "off",
+        "curly": "off"
+      }
+    }
+  ]
 }

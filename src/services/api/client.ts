@@ -98,6 +98,38 @@ export const verifyApiKey = async (apiKey: string, signal?: AbortSignal): Promis
   })
 }
 
+
+export type BalanceInfo = {
+  currency: 'CNY' | 'USD'
+  total_balance: string
+  granted_balance: string
+  topped_up_balance: string
+}
+export type BalanceResponse = { is_available?: boolean; balance_infos?: BalanceInfo[] }
+
+/** 查询账户余额（官方公开 API，不产生费用）。 */
+export const getBalance = async (apiKey: string, signal?: AbortSignal): Promise<BalanceResponse> => {
+  const response = await request(`${API_ORIGIN}/user/balance`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal,
+  })
+  return (await response.json()) as BalanceResponse
+}
+
+export type ModelInfo = { id: string; object?: string; owned_by?: string }
+export type ModelsResponse = { object?: string; data: ModelInfo[] }
+
+/** 获取可用模型列表。 */
+export const getModels = async (apiKey: string, signal?: AbortSignal): Promise<ModelInfo[]> => {
+  const response = await request(`${API_ORIGIN}/models`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal,
+  })
+  const data = (await response.json()) as ModelsResponse
+  return data.data ?? []
+}
 /**
  * POST /anthropic/v1/files 上传附件（不设过期时间，会话里的历史附件一直可用）。
  * purpose 为 null 时不传该字段（图片）；purpose 必须排在 file 之前。

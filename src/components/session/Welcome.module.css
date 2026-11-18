@@ -20,12 +20,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   margin-bottom: 21px;
   font-size: 24px;
   line-height: 32px;
   font-weight: 600;
   text-align: center;
   color: var(--dsw-alias-label-primary);
+}
+
+.greeting svg {
+  width: 28px;
+  height: 21px;
+  flex-shrink: 0;
 }
 
 @media (max-width: 439px) {
@@ -65,4 +72,22 @@
     color: var(--dsw-alias-label-tertiary);
     user-select: none;
   }
+}
+
+.welcome {
+  animation: welcomeIn 0.35s var(--ds-ease-out-back) both;
+}
+
+.greeting {
+  animation: greetingIn 0.4s var(--ds-ease-out-back) 0.05s both;
+}
+
+@keyframes welcomeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes greetingIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }

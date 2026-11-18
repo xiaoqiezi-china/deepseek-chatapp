@@ -35,3 +35,12 @@
   margin: 0 auto;
   padding-bottom: 24px;
 }
+
+.column {
+  animation: messageListIn 0.28s var(--ds-ease-in-out) both;
+}
+
+@keyframes messageListIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

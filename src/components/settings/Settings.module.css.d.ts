@@ -33,6 +33,27 @@ declare const styles: {
   readonly "importConfirmText": string;
   readonly "deleteConfirm": string;
   readonly "deleteActions": string;
+  readonly "accountContent": string;
+  readonly "accountLogin": string;
+  readonly "accountDescription": string;
+  readonly "accountLabel": string;
+  readonly "accountStatus": string;
+  readonly "accountSectionTitle": string;
+  readonly "accountRow": string;
+  readonly "accountValue": string;
+  readonly "accountModels": string;
+  readonly "accountModel": string;
+  readonly "accountActions": string;
+  readonly "systemPrompt": string;
+  readonly "systemPromptTextarea": string;
+  readonly "systemPromptFooter": string;
+  readonly "systemPromptRestore": string;
+  readonly "systemPromptDefaultText": string;
+  readonly "accountGate": string;
+  readonly "accountGateWhale": string;
+  readonly "accountGateTitle": string;
+  readonly "accountGateDescription": string;
+  readonly "accountGateButton": string;
 };
 export = styles;
 

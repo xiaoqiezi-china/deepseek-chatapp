@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
 import { IconCloseOutline16 } from './icons.js'
@@ -31,14 +31,23 @@ export const Modal = ({
 }) => {
   const t = useTranslate()
   const titleId = useId()
+  const [closing, setClosing] = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleClose = () => {
+    if (closing) { return }
+    setClosing(true)
+    closeTimer.current = setTimeout(() => { onCloseRef.current() }, 180)
+  }
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
+  const handleCloseRef = useRef(handleClose)
+  handleCloseRef.current = handleClose
   useEffect(() => {
     const token = {}
     openModals.push(token)
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && openModals.at(-1) === token) {
-        onCloseRef.current()
+        handleCloseRef.current()
       }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -48,13 +57,17 @@ export const Modal = ({
     }
   }, [])
 
+  useEffect(() => () => {
+    if (closeTimer.current) { clearTimeout(closeTimer.current) }
+  }, [])
+
   return createPortal(
     <div
-      className={styles.overlay}
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+      className={clsx(styles.overlay, closing && styles.overlayClosing)}
+      onMouseDown={(event) => event.target === event.currentTarget && handleClose()}
     >
       <div
-        className={clsx(styles.content, className)}
+        className={clsx(styles.content, closing && styles.contentClosing, className)}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -69,7 +82,7 @@ export const Modal = ({
               tone="primary"
               icon={<IconCloseOutline16 />}
               aria-label={t('close')}
-              onClick={onClose}
+              onClick={handleClose}
             />
           ) : null}
         </div>

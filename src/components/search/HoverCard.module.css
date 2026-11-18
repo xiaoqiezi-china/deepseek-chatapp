@@ -9,3 +9,13 @@
   background: var(--dsw-specific-menu);
   box-shadow: var(--dsw-shadow-lv3);
 }
+
+.card {
+  animation: hoverCardIn 0.18s var(--ds-ease-out-back) both;
+  transition: box-shadow var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+@keyframes hoverCardIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

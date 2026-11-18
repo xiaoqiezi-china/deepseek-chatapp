@@ -18,3 +18,13 @@
   white-space: nowrap;
   user-select: none;
 }
+
+.count {
+  transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.previous,
+.switcher button {
+  transition: transform var(--ds-transition-duration) var(--ds-ease-in-out),
+    background-color var(--ds-transition-duration) var(--ds-ease-in-out);
+}

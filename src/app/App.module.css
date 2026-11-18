@@ -60,3 +60,21 @@
     height: var(--app-viewport-height, 100dvh);
   }
 }
+
+.content {
+  animation: contentIn 0.3s var(--ds-ease-in-out) both;
+}
+
+.saveError {
+  animation: saveErrorIn 0.25s var(--ds-ease-in-out) both;
+}
+
+@keyframes contentIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes saveErrorIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

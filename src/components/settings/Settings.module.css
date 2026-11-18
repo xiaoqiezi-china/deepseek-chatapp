@@ -68,6 +68,7 @@
   margin-right: -24px;
   padding: 0 24px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .cell {
@@ -439,4 +440,191 @@
     overflow-wrap: anywhere;
     max-width: 100%;
   }
+}
+
+
+/* ---- 账号管理 / 系统提示词 ---- */
+.accountContent,
+.accountLogin {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accountDescription {
+  font-size: 14px;
+  color: var(--dsw-alias-label-secondary);
+  line-height: 1.5;
+}
+
+.accountLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.accountStatus {
+  font-size: 14px;
+  color: var(--dsw-alias-label-secondary);
+  padding: 8px 0;
+}
+
+.accountSectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+
+.accountRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+  color: var(--dsw-alias-label-secondary);
+  padding: 6px 0;
+}
+
+.accountValue {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.accountModels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accountModel {
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-skeleton);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
+.accountActions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.systemPrompt {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.systemPromptTextarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.systemPromptTextarea:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.systemPromptFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.systemPromptRestore {
+  border: none;
+  background: none;
+  color: var(--dsw-alias-brand-text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.systemPromptRestore:hover {
+  text-decoration: underline;
+}
+
+.systemPromptDefaultText {
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+  padding: 8px 0;
+  line-height: 1.5;
+}
+
+
+.content {
+  animation: settingsSectionIn 0.22s var(--ds-ease-in-out) both;
+}
+
+@keyframes settingsSectionIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ---- 账号登录卡片（未登录） ---- */
+.accountGate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.accountGateWhale {
+  width: 96px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: accountGateIn 0.6s var(--ds-ease-out-back) both;
+}
+
+.accountGateWhale svg {
+  width: 100%;
+  height: 100%;
+}
+
+.accountGateTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  animation: accountGateIn 0.5s var(--ds-ease-in-out) 0.1s both;
+}
+
+.accountGateDescription {
+  font-size: 14px;
+  color: var(--dsw-alias-label-secondary);
+  animation: accountGateIn 0.5s var(--ds-ease-in-out) 0.2s both;
+}
+
+.accountGateButton {
+  margin-top: 8px;
+  min-width: 140px;
+  animation: accountGateIn 0.5s var(--ds-ease-in-out) 0.3s both;
+}
+
+@keyframes accountGateIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }

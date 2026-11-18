@@ -26,12 +26,15 @@
   min-width: 0;
   padding-left: 4px;
   overflow: hidden;
-  font-size: 20px;
-  line-height: 22px;
-  font-weight: 600;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
   color: var(--dsw-alias-brand-primary);
+}
+
+.appName svg {
+  width: 130px;
+  height: auto;
+  max-height: 24px;
 }
 
 .newChat {
@@ -244,4 +247,14 @@
     font-size: 16px;
     line-height: 22px;
   }
+}
+
+
+.sider {
+  animation: siderIn 0.28s var(--ds-ease-in-out) both;
+}
+
+@keyframes siderIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
 }

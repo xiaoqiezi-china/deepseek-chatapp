@@ -11,6 +11,9 @@ declare const styles: {
   readonly "continueButton": string;
   readonly "summary": string;
   readonly "summaryActive": string;
+  readonly "editor": string;
+  readonly "editorTextarea": string;
+  readonly "editorActions": string;
 };
 export = styles;
 

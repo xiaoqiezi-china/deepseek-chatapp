@@ -84,3 +84,17 @@
     font-size: 16px;
   }
 }
+
+.item {
+  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out),
+    color var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.action {
+  animation: actionIn 0.14s var(--ds-ease-in-out) both;
+}
+
+@keyframes actionIn {
+  from { opacity: 0; transform: translateX(4px); }
+  to { opacity: 1; transform: translateX(0); }
+}

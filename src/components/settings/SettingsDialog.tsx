@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   IconDarkOutline16,
   IconDataOutline16,
@@ -15,7 +15,6 @@ import {
   exportHistory,
   importHistory,
 } from '../../services/chat/backup.js'
-import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
@@ -24,15 +23,25 @@ import {
   setLocation,
   setThemePreference,
   setTtsVoice,
-  useSettings,
   type ThemePreference,
 } from '../../services/settings.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
+import { getBalance, getModels, type BalanceInfo, type ModelInfo } from '../../services/api/client.js'
+import { classifyApiError } from '../../services/api/errors.js'
+import { DeepSeekWhaleIcon } from '../base/icons.js'
+import { IconAccountOutline16 } from '../base/icons.js'
+import { openAccountDialog } from '../account/accountState.js'
+import {
+  DEFAULT_SYSTEM_PROMPT,
+  setSystemPrompt,
+  setSystemPromptMode,
+  setModel,
+  useSettings,
+} from '../../services/settings.js'
 import { Modal } from '../base/Modal.js'
 import { Select } from '../base/Select.js'
 import { showToast } from '../base/toastState.js'
-import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 
@@ -52,15 +61,14 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
     icon: <IconSettingsOutline16 />,
   },
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
+  { value: 'account', label: 'settingDialogAsideAccountOptionLabel', icon: <IconAccountOutline16 /> },
 ]
 
 const SettingsContent = () => {
   const t = useTranslate()
-  const isMobile = useIsMobile()
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
   const [section, setSection] = useState(() => useSettingsDialog.getState().section)
-  // 切换分组不丢失正在输入的 API Key 与导入状态
-  const apiKeyEditor = useApiKeyEditor()
+  // 切换分组不丢失导入状态
   const historyImport = useHistoryImport()
   const historyDelete = useHistoryDelete()
   const replacingHistory = useChatStore((state) => state.importingHistory)
@@ -100,10 +108,11 @@ const SettingsContent = () => {
               <LocaleSetting />
               <TtsVoiceSetting />
               <LocationSetting />
+              <ModelSetting />
+              <SystemPromptSetting />
             </>
-          ) : (
+          ) : section === 'data' ? (
             <>
-              <ApiKeyField editor={apiKeyEditor} />
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
               <SettingCell
@@ -121,8 +130,9 @@ const SettingsContent = () => {
                   </Button>
                 }
               />
-              {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
+          ) : (
+            <AccountSetting />
           )}
         </div>
       </Modal>
@@ -553,6 +563,158 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
           <IconDownloadOutline16 />
           {t('exportAllDownload')}
         </Button>
+      }
+    />
+  )
+}
+
+
+/** 系统提示词：默认 / 自定义两态；自定义内容为空即请求中不发送 system。 */
+const SystemPromptSetting = () => {
+  const t = useTranslate()
+  const mode = useSettings((state) => state.systemPromptMode)
+  const value = useSettings((state) => state.systemPrompt)
+  return (
+    <div className={styles.systemPrompt}>
+      <div className={styles.label}>{t('systemPromptLabel')}</div>
+      <Select
+        ariaLabel={t('systemPromptLabel')}
+        value={mode}
+        options={[
+          { value: 'default', label: t('systemPromptDefault') },
+          { value: 'custom', label: t('systemPromptCustom') },
+        ]}
+        onChange={(next) => setSystemPromptMode(next === 'custom' ? 'custom' : 'default')}
+      />
+      {mode === 'custom' ? (
+        <>
+          <textarea
+            className={styles.systemPromptTextarea}
+            aria-label={t('systemPromptLabel')}
+            placeholder={t('systemPromptPlaceholder')}
+            value={value}
+            onChange={(event) => setSystemPrompt(event.target.value)}
+          />
+          <div className={styles.systemPromptFooter}>
+            <span>{t('systemPromptCharacterCount', { count: value.length })}</span>
+            <button
+              type="button"
+              className={styles.systemPromptRestore}
+              onClick={() => {
+                setSystemPromptMode('default')
+                setSystemPrompt('')
+              }}
+            >
+              {t('systemPromptRestore')}
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className={styles.systemPromptDefaultText}>{DEFAULT_SYSTEM_PROMPT}</div>
+      )}
+    </div>
+  )
+}
+
+/** 账号管理：展示当前密钥状态与登录入口，实际信息在登录弹窗里。 */
+const AccountSetting = () => {
+  const t = useTranslate()
+  const apiKey = useSettings((state) => state.apiKey)
+  const [info, setInfo] = useState<{ balance: BalanceInfo[]; available: boolean | null; models: ModelInfo[] } | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async (key: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [balance, models] = await Promise.all([getBalance(key), getModels(key)])
+      setInfo({ balance: balance.balance_infos ?? [], available: balance.is_available ?? null, models })
+    } catch (cause) {
+      setError(classifyApiError(cause) === 'unauthorized' ? t('accountKeyInvalid') : t('accountLoadFailed'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (apiKey) { void load(apiKey) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKey])
+
+  // 未登录：鲸鱼登录卡片
+  if (!apiKey) {
+    return (
+      <div className={styles.accountGate}>
+        <div className={styles.accountGateWhale}><DeepSeekWhaleIcon /></div>
+        <div className={styles.accountGateTitle}>{t('welcomeLoginTitle')}</div>
+        <div className={styles.accountGateDescription}>{t('welcomeLoginDescription')}</div>
+        <Button variant="primary" size="m" className={styles.accountGateButton} onClick={openAccountDialog}>
+          {t('accountLogin')}
+        </Button>
+      </div>
+    )
+  }
+
+  // 已登录：账户余额与模型
+  return (
+    <div className={styles.accountContent}>
+      {loading ? <div className={styles.accountStatus}>{t('accountLoading')}</div> : null}
+      {error ? <div className={styles.error}>{error}</div> : null}
+      {info ? (
+        <>
+          <div className={styles.accountSectionTitle}>{t('accountBalanceSection')}</div>
+          {info.available !== null ? (
+            <div className={styles.accountRow}>
+              <span>{t('accountAvailable')}</span>
+              <span className={info.available ? styles.accountValue : styles.error}>
+                {info.available ? t('accountAvailableYes') : t('accountAvailableNo')}
+              </span>
+            </div>
+          ) : null}
+          {info.balance.map((b) => (
+            <div key={b.currency}>
+              <div className={styles.accountRow}><span>{t('accountCurrency')}</span><span className={styles.accountValue}>{b.currency}</span></div>
+              <div className={styles.accountRow}><span>{t('accountTotalBalance')}</span><span className={styles.accountValue}>{b.total_balance}</span></div>
+              <div className={styles.accountRow}><span>{t('accountGrantedBalance')}</span><span className={styles.accountValue}>{b.granted_balance}</span></div>
+              <div className={styles.accountRow}><span>{t('accountToppedUpBalance')}</span><span className={styles.accountValue}>{b.topped_up_balance}</span></div>
+            </div>
+          ))}
+          <div className={styles.accountSectionTitle}>{t('accountModelsSection')}</div>
+          {info.models.length ? (
+            <div className={styles.accountModels}>
+              {info.models.map((m) => <span key={m.id} className={styles.accountModel}>{m.id}</span>)}
+            </div>
+          ) : <div className={styles.accountStatus}>{t('accountModelsEmpty')}</div>}
+        </>
+      ) : null}
+      <div className={styles.accountActions}>
+        <Button variant="outlined" size="m" onClick={() => { if (apiKey) { void load(apiKey) } }} disabled={loading}>{t('accountRefresh')}</Button>
+        <Button variant="outlined" size="m" onClick={openAccountDialog}>{t('accountChangeKey')}</Button>
+      </div>
+    </div>
+  )
+}
+
+
+/** 聊天模型选择：默认 deepseek-flash，可切换 deepseek-v4-pro。 */
+const ModelSetting = () => {
+  const t = useTranslate()
+  const model = useSettings((state) => state.model)
+  return (
+    <SettingCell
+      label={t('settingsModel')}
+      status={null}
+      action={
+        <Select
+          ariaLabel={t('settingsModel')}
+          value={model}
+          options={[
+            { value: 'deepseek-flash', label: 'deepseek-flash' },
+            { value: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+          ]}
+          onChange={(next) => setModel(next === 'deepseek-v4-pro' ? 'deepseek-v4-pro' : 'deepseek-flash')}
+        />
       }
     />
   )
