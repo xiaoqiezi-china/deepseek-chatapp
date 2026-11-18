@@ -15,10 +15,11 @@
         <item name="android:background">@null</item>
     </style>
 
-    <!-- 启动主题：纯色背景 + 应用图标，启动完成后立即切回主主题 -->
+    <!-- 启动主题：只有纯色背景，不显示应用图标，避免开屏图标动画 -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/appBackground</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_transparent</item>
+        <item name="windowSplashScreenAnimationDuration">0</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 
