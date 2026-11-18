@@ -102,22 +102,27 @@
 
 
 /* ---- 多选 ---- */
+/* 多选复选框：绝对定位渐显，标题用 padding 过渡平滑右移 */
 .checkbox {
-  animation: checkboxIn 0.18s var(--ds-ease-out-back) both;
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
   width: 22px;
   height: 22px;
-  margin-right: 10px;
+  opacity: 0;
   border-radius: 50%;
   border: 1.5px solid var(--dsw-alias-border-l3);
   color: #fff;
+  pointer-events: none;
   transition:
-    background-color var(--ds-transition-duration) var(--ds-ease-in-out),
-    border-color var(--ds-transition-duration) var(--ds-ease-in-out);
+    opacity 0.18s var(--ds-ease-in-out),
+    background-color 0.18s var(--ds-ease-in-out),
+    border-color 0.18s var(--ds-ease-in-out);
 }
 
 .checkbox svg {
@@ -125,14 +130,21 @@
   height: 12px;
 }
 
+.checkboxVisible {
+  opacity: 1;
+}
+
 .checkboxChecked {
   border-color: var(--dsw-alias-brand-primary);
   background-color: var(--dsw-alias-brand-primary);
 }
 
-@keyframes checkboxIn {
-  from { opacity: 0; transform: scale(0.5); }
-  to { opacity: 1; transform: scale(1); }
+.title {
+  transition: padding-left 0.18s var(--ds-ease-in-out);
+}
+
+.selectionMode .title {
+  padding-left: 32px;
 }
 
 .selected {

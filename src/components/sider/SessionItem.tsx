@@ -78,16 +78,22 @@ export const SessionItem = memo(function SessionItem({
       className={clsx(
         styles.item,
         active && !selectionMode && styles.active,
+        selectionMode && styles.selectionMode,
         selected && styles.selected,
         menuOpen && styles.menuOpen
       )}
       onClick={onClick}
     >
-      {selectionMode ? (
-        <span className={clsx(styles.checkbox, selected && styles.checkboxChecked)} aria-hidden>
-          {selected ? <IconCheckOutline16 /> : null}
-        </span>
-      ) : null}
+      <span
+        className={clsx(
+          styles.checkbox,
+          selectionMode && styles.checkboxVisible,
+          selected && styles.checkboxChecked
+        )}
+        aria-hidden
+      >
+        {selected ? <IconCheckOutline16 /> : null}
+      </span>
       <div className={styles.title}>{displayTitle}</div>
       {selectionMode ? null : (
         <div className={styles.action} onClick={(event) => event.stopPropagation()}>
