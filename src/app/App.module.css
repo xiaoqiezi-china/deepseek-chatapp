@@ -78,3 +78,17 @@
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+
+/* 侧边栏收起/展开：宽度过渡，内容裁剪，主区域随之平滑扩展 */
+.siderSlot {
+  display: flex;
+  flex-shrink: 0;
+  width: 261px;
+  overflow: hidden;
+  transition: width 0.26s var(--ds-ease-in-out);
+}
+
+.siderSlotCollapsed {
+  width: 0;
+}

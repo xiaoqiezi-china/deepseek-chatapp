@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon, DeepSeekTitleIcon } from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
@@ -140,16 +140,64 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   )
 }
 
-/** 移动端抽屉：浮在页面上方，点空白区域关闭。 */
+/** 移动端抽屉：浮在页面上方，点空白区域或向左滑动关闭。 */
 export const MobileSider = () => {
   const open = useMobileSider((state) => state.open)
+  const closing = useMobileSider((state) => state.closing)
+  const [offset, setOffset] = useState(0)
+  const gesture = useRef<{ x: number; y: number; horizontal: boolean } | null>(null)
+
   if (!open) {
     return null
   }
+
+  const onTouchStart = (event: React.TouchEvent) => {
+    const touch = event.touches[0]
+    gesture.current = { x: touch.clientX, y: touch.clientY, horizontal: false }
+    setOffset(0)
+  }
+
+  const onTouchMove = (event: React.TouchEvent) => {
+    const start = gesture.current
+    if (!start) {
+      return
+    }
+    const touch = event.touches[0]
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    // 纵向为主时视为滚动列表，不拦截
+    if (!start.horizontal) {
+      if (Math.abs(dy) > Math.abs(dx)) {
+        return
+      }
+      start.horizontal = true
+    }
+    // 只允许向左拖动
+    setOffset(Math.min(0, dx))
+  }
+
+  const onTouchEnd = () => {
+    gesture.current = null
+    if (offset < -60) {
+      closeMobileSider()
+    }
+    setOffset(0)
+  }
+
   return (
     <>
-      <div className={styles.drawerMask} onClick={closeMobileSider} />
-      <div className={styles.drawer}>
+      <div
+        className={closing ? styles.drawerMaskClosing : styles.drawerMask}
+        onClick={closeMobileSider}
+      />
+      <div
+        className={closing ? styles.drawerClosing : styles.drawer}
+        style={offset ? { transform: `translateX(${offset}px)` } : undefined}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+      >
         <Sider mobile />
       </div>
     </>

@@ -32,7 +32,7 @@
 }
 
 .appName svg {
-  width: 130px;
+  width: 143px;
   height: auto;
   max-height: 24px;
 }
@@ -172,6 +172,15 @@
 }
 
 .collapsed {
+  animation: collapsedIn 0.22s var(--ds-ease-in-out) both;
+}
+
+@keyframes collapsedIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.collapsed {
   position: absolute;
   top: 0;
   left: 0;
@@ -196,11 +205,49 @@
 }
 
 .drawer {
+  animation: drawerIn 0.24s var(--ds-ease-out-back) both;
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+.drawerClosing {
+  animation: drawerOut 0.2s var(--ds-ease-in-out) both;
+}
+
+@keyframes drawerIn {
+  from { transform: translateX(-100%); opacity: 0.6; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes drawerOut {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-100%); opacity: 0.6; }
+}
+
+.drawer {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
   z-index: 800;
+}
+
+.drawerMask {
+  animation: maskIn 0.2s var(--ds-ease-in-out) both;
+}
+
+.drawerMaskClosing {
+  animation: maskOut 0.2s var(--ds-ease-in-out) both;
+}
+
+@keyframes maskIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes maskOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 .drawerMask {
