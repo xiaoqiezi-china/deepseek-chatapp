@@ -12,7 +12,7 @@ export type ThemePreference = 'light' | 'dark' | 'system'
 /** 系统提示词模式：默认（官方身份）/ 自定义（内容为空即不发送 system） */
 export type SystemPromptMode = 'default' | 'custom'
 
-export const DEFAULT_SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
+export const DEFAULT_SYSTEM_PROMPT = '你是运行在DeepseekCE上的智能助手，完成用户的任务。'
 
 /** 本机设置，持久化到后端本地 JSON 文件。 */
 type Settings = {

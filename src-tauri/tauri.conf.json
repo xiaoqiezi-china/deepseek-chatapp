@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DeepSeek Chat",
+  "productName": "Deepseek CE",
   "version": "0.1.0",
   "identifier": "com.deepseek.chatapp",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "DeepSeek",
+        "title": "Deepseek CE",
         "width": 1280,
         "height": 800,
         "minWidth": 720,
@@ -37,8 +37,8 @@
     ],
     "copyright": "Copyright (c) 2026 DeepSeek",
     "category": "Productivity",
-    "shortDescription": "DeepSeek Chat App",
-    "longDescription": "Chat client based on DeepSeek chat-demo",
+    "shortDescription": "Deepseek CE",
+    "longDescription": "Deepseek CE：基于 DeepSeek chat-demo 的社区版聊天客户端",
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper",
