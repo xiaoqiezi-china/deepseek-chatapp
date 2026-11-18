@@ -29,7 +29,8 @@ import { useTranslate, type TranslationKey, type TranslationMessage } from '../.
 import { Button } from '../base/Button.js'
 import { IconFolderOutline16, IconInfoOutline16 } from '../base/icons.js'
 import { isCapacitorNative, storageFetch } from '../../services/storage/bridge.js'
-import { checkForUpdate, installUpdate, isUpdaterSupported } from '../../services/updater.js'
+import { isUpdaterSupported } from '../../services/updater.js'
+import { checkUpdate, installUpdateNow, useUpdateStore } from '../../services/updateStore.js'
 import { getBalance, getModels, type BalanceInfo, type ModelInfo } from '../../services/api/client.js'
 import { classifyApiError } from '../../services/api/errors.js'
 import { DeepSeekWhaleIcon } from '../base/icons.js'
@@ -780,57 +781,29 @@ const AboutSetting = () => {
 }
 
 /** 检查更新：仅桌面端可用，从 GitHub Releases 拉取最新版本 */
-type UpdateState = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'error'
-
 const UpdateSetting = () => {
   const t = useTranslate()
-  const [state, setState] = useState<UpdateState>('idle')
-  const [version, setVersion] = useState('')
-  const [downloadUrl, setDownloadUrl] = useState('')
-  const [percent, setPercent] = useState(-1)
+  // 与启动时的静默检查共用状态：自动检测到更新后，进来直接显示可安装
+  const status = useUpdateStore((state) => state.status)
+  const version = useUpdateStore((state) => state.version)
+  const percent = useUpdateStore((state) => state.percent)
 
   if (!isUpdaterSupported()) {
     return null
   }
 
-  const check = async () => {
-    setState('checking')
-    try {
-      const result = await checkForUpdate()
-      if (result.status === 'available') {
-        setVersion(result.version)
-        setDownloadUrl(result.downloadUrl)
-        setState('available')
-      } else {
-        setState('latest')
-      }
-    } catch {
-      setState('error')
-    }
-  }
-
-  const install = async () => {
-    setPercent(-1)
-    setState('downloading')
-    try {
-      await installUpdate(downloadUrl, setPercent)
-    } catch {
-      setState('error')
-    }
-  }
-
-  const status: Status =
-    state === 'checking'
+  const message: Status =
+    status === 'checking'
       ? { key: 'updateChecking' as const }
-      : state === 'latest'
+      : status === 'latest'
         ? { key: 'updateLatest' as const }
-        : state === 'available'
+        : status === 'available'
           ? { key: 'updateAvailable' as const, params: { version } }
-          : state === 'downloading'
+          : status === 'downloading'
             ? percent >= 0
               ? { key: 'updateDownloading' as const, params: { percent } }
               : { key: 'updateDownloadingGeneric' as const }
-            : state === 'error'
+            : status === 'error'
               ? { key: 'updateFailed' as const, error: true }
               : null
 
@@ -838,10 +811,10 @@ const UpdateSetting = () => {
     <SettingCell
       label={t('checkUpdate')}
       description={t('checkUpdateDescription')}
-      status={status}
+      status={message}
       action={
-        state === 'available' ? (
-          <Button size="m" className={styles.cellButton} onClick={() => void install()}>
+        status === 'available' ? (
+          <Button size="m" className={styles.cellButton} onClick={() => void installUpdateNow()}>
             {t('updateInstall')}
           </Button>
         ) : (
@@ -849,8 +822,8 @@ const UpdateSetting = () => {
             variant="outlined"
             size="m"
             className={styles.cellButton}
-            disabled={state === 'checking' || state === 'downloading'}
-            onClick={() => void check()}
+            disabled={status === 'checking' || status === 'downloading'}
+            onClick={() => void checkUpdate()}
           >
             {t('checkUpdate')}
           </Button>
@@ -859,3 +832,4 @@ const UpdateSetting = () => {
     />
   )
 }
+

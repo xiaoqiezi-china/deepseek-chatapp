@@ -19,7 +19,8 @@ import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { AccountDialog } from '../components/account/AccountDialog.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
-import { checkForUpdate, isUpdaterSupported } from '../services/updater.js'
+import { isUpdaterSupported } from '../services/updater.js'
+import { checkUpdate, useUpdateStore } from '../services/updateStore.js'
 import { onUploadNotice } from '../services/attachments.js'
 import { Button } from '../components/base/Button.js'
 import { stopReadAloud } from '../services/speech/readAloud.js'
@@ -75,13 +76,12 @@ export const App = () => {
       return
     }
     const timer = setTimeout(() => {
-      void checkForUpdate()
-        .then((result) => {
-          if (result.status === 'available') {
-            showToast({ key: 'updateAvailable', params: { version: result.version } })
-          }
-        })
-        .catch(() => {})
+      void checkUpdate().then(() => {
+        const state = useUpdateStore.getState()
+        if (state.status === 'available') {
+          showToast({ key: 'updateAvailable', params: { version: state.version } })
+        }
+      })
     }, 5000)
     return () => clearTimeout(timer)
   }, [])

@@ -1,7 +1,7 @@
 /**
  * 自动更新：
- * - 桌面端：Tauri updater 从 GitHub Releases 拉取 latest.json
- * - Android：GitHub API 查询最新 Release，应用内下载 APK 并拉起系统安装器
+ * - 桌面端：Tauri updater（endpoints 配置多个源，依次兜底）
+ * - Android：并行探测镜像源，取最快可用源读取更新信息并下载 APK
  * - 网页版：不支持
  */
 type TauriWindow = Window & { __TAURI_INTERNALS__?: unknown }
@@ -10,6 +10,17 @@ type CapWindow = Window & {
 }
 
 const REPO = 'xiaoqiezi-china/deepseek-chatapp'
+const LATEST_JSON = `https://github.com/${REPO}/releases/latest/download/latest.json`
+
+/** 常见 GitHub 加速镜像；空前缀表示直连 */
+export const MIRRORS: { name: string; prefix: string }[] = [
+  { name: 'gh-proxy.com', prefix: 'https://gh-proxy.com/' },
+  { name: 'ghfast.top', prefix: 'https://ghfast.top/' },
+  { name: 'ghproxy.net', prefix: 'https://ghproxy.net/' },
+  { name: 'github', prefix: '' },
+]
+
+const mirrorUrl = (prefix: string, url: string): string => (prefix ? prefix + url : url)
 
 const isTauri = (): boolean =>
   typeof window !== 'undefined' && !!((window as TauriWindow).__TAURI_INTERNALS__)
@@ -26,16 +37,11 @@ const isAndroid = (): boolean => {
 export const isUpdaterSupported = (): boolean => isTauri() || isAndroid()
 
 export type UpdateCheck =
-  | { status: 'available'; version: string; notes: string; downloadUrl: string }
-  | { status: 'latest' }
+  | { status: 'available'; version: string; notes: string; downloadUrl: string; source: string }
+  | { status: 'latest'; source: string }
 
-type AppUpdaterPlugin = {
-  getVersion(): Promise<{ version: string }>
-  downloadAndInstall(options: { url: string }): Promise<void>
-}
-
-/** 比较 a.b.c 形式的版本号，返回 -1 / 0 / 1 */
-const compareVersion = (left: string, right: string): number => {
+/** 比较 a.b.c 版本号，返回 -1 / 0 / 1 */
+export const compareVersion = (left: string, right: string): number => {
   const parse = (value: string): number[] =>
     value
       .split(/[.-]/)
@@ -53,57 +59,85 @@ const compareVersion = (left: string, right: string): number => {
   return 0
 }
 
+type Manifest = {
+  version?: string
+  notes?: string
+  platforms?: Record<string, { url?: string }>
+}
+
+/** 并行探测各镜像的连通性与耗时，返回按耗时升序的可用源 */
+export const probeMirrors = async (
+  timeoutMs = 8000
+): Promise<{ name: string; url: string; ms: number; manifest: Manifest }[]> => {
+  const tasks = MIRRORS.map(async (mirror) => {
+    const url = mirrorUrl(mirror.prefix, LATEST_JSON)
+    const start = performance.now()
+    const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+    if (!response.ok) {
+      throw new Error(mirror.name + ' status ' + response.status)
+    }
+    const manifest = (await response.json()) as Manifest
+    return { name: mirror.name, url, ms: Math.round(performance.now() - start), manifest }
+  })
+  const settled = await Promise.allSettled(tasks)
+  return settled
+    .filter((item): item is PromiseFulfilledResult<{ name: string; url: string; ms: number; manifest: Manifest }> =>
+      item.status === 'fulfilled'
+    )
+    .map((item) => item.value)
+    .sort((a, b) => a.ms - b.ms)
+}
+
 /** 查询是否有新版本 */
 export const checkForUpdate = async (): Promise<UpdateCheck> => {
   if (isTauri()) {
     const { check } = await import('@tauri-apps/plugin-updater')
     const update = await check()
     if (!update) {
-      return { status: 'latest' }
+      return { status: 'latest', source: 'tauri' }
     }
     return {
       status: 'available',
       version: update.version,
       notes: update.body ?? '',
       downloadUrl: '',
+      source: 'tauri',
     }
   }
 
   if (isAndroid()) {
     const { registerPlugin } = await import('@capacitor/core')
-    const plugin = registerPlugin<AppUpdaterPlugin>('AppUpdater')
+    const plugin = registerPlugin<{ getVersion(): Promise<{ version: string }> }>('AppUpdater')
     const current = (await plugin.getVersion()).version
-    const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-      headers: { Accept: 'application/vnd.github+json' },
-    })
-    if (!response.ok) {
-      throw new Error('github api ' + response.status)
+    const sources = await probeMirrors()
+    if (sources.length === 0) {
+      throw new Error('all mirrors unreachable')
     }
-    const release = (await response.json()) as {
-      tag_name?: string
-      body?: string
-      assets?: { name: string; browser_download_url: string }[]
-    }
-    const latest = (release.tag_name ?? '').replace(/^v/, '')
-    const asset = release.assets?.find((item) => item.name.endsWith('.apk'))
-    if (!latest || !asset) {
-      throw new Error('no apk asset in release')
-    }
-    if (compareVersion(latest, current) > 0) {
-      return {
-        status: 'available',
-        version: latest,
-        notes: release.body ?? '',
-        downloadUrl: asset.browser_download_url,
+    // 取最快的可用源；若其清单缺少 APK，继续尝试其他源
+    for (const source of sources) {
+      const latest = (source.manifest.version ?? '').trim()
+      const apkUrl = source.manifest.platforms?.android?.url
+      if (!latest || !apkUrl) {
+        continue
       }
+      if (compareVersion(latest, current) > 0) {
+        return {
+          status: 'available',
+          version: latest,
+          notes: source.manifest.notes ?? '',
+          downloadUrl: apkUrl,
+          source: source.name,
+        }
+      }
+      return { status: 'latest', source: source.name }
     }
-    return { status: 'latest' }
+    throw new Error('no usable manifest')
   }
 
   throw new Error('updater not supported')
 }
 
-/** 下载并安装更新；桌面端完成后自动重启，Android 拉起系统安装器 */
+/** 下载并安装更新 */
 export const installUpdate = async (
   downloadUrl: string,
   onProgress?: (percent: number) => void
@@ -133,7 +167,9 @@ export const installUpdate = async (
 
   if (isAndroid()) {
     const { registerPlugin } = await import('@capacitor/core')
-    const plugin = registerPlugin<AppUpdaterPlugin>('AppUpdater')
+    const plugin = registerPlugin<{ downloadAndInstall(options: { url: string }): Promise<void> }>(
+      'AppUpdater'
+    )
     await plugin.downloadAndInstall({ url: downloadUrl })
     return
   }
