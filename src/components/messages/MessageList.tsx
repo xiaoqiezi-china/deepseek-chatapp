@@ -47,6 +47,7 @@ export const MessageList = ({
   const contentRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef(true)
   const scrollTopRef = useRef(0)
+  const animationRef = useRef<number | null>(null)
   const restoreScrollRef = useRef<{ messageId: string; top: number } | null>(null)
   const messages = getVisibleMessages(session)
   const [previousVersions, setPreviousVersions] = useState(() =>
@@ -60,12 +61,58 @@ export const MessageList = ({
     setPreviousVersions(versions)
   }
   const lastMessageId = messages.at(-1)?.id
-  const scrollToBottom = useCallback(() => {
+
+  /** 直接落到底部：切换会话、发送消息等需要立刻定位的场景使用 */
+  const jumpToBottom = useCallback(() => {
     const el = scrollRef.current
-    if (el && stickyRef.current) {
-      el.scrollTop = el.scrollHeight
-      scrollTopRef.current = el.scrollTop
+    if (!el) {
+      return
     }
+    el.scrollTop = el.scrollHeight
+    scrollTopRef.current = el.scrollTop
+  }, [])
+
+  /** 用户主动上滑：立刻停止跟随，内容继续增长也不再拉回底部 */
+  const stopFollow = useCallback(() => {
+    stickyRef.current = false
+    if (animationRef.current !== null) {
+      cancelAnimationFrame(animationRef.current)
+      animationRef.current = null
+    }
+  }, [])
+
+  /**
+   * 贴底时平滑跟随：每帧按剩余距离缓动，内容持续增长也只会匀速下滑，
+   * 不会瞬移到最底部。未贴底时直接忽略。
+   */
+  const followBottom = useCallback(() => {
+    if (!stickyRef.current || animationRef.current !== null) {
+      return
+    }
+    let last = performance.now()
+    const step = (now: number) => {
+      const el = scrollRef.current
+      if (!el || !stickyRef.current) {
+        animationRef.current = null
+        return
+      }
+      const bottom = Math.max(0, el.scrollHeight - el.clientHeight)
+      const remaining = bottom - el.scrollTop
+      // 帧间隔归一化，低帧率下也不会变慢
+      const frames = Math.min(4, Math.max(0.5, (now - last) / 16.7))
+      last = now
+      if (remaining <= 0.6) {
+        el.scrollTop = bottom
+        scrollTopRef.current = el.scrollTop
+        animationRef.current = null
+        return
+      }
+      // 每帧走剩余距离的 20%，约 0.2s 收敛，形成逐行缓动下滑
+      el.scrollTop += remaining * (1 - Math.pow(0.8, frames))
+      scrollTopRef.current = el.scrollTop
+      animationRef.current = requestAnimationFrame(step)
+    }
+    animationRef.current = requestAnimationFrame(step)
   }, [])
 
   // 内容、键盘和输入框高度变化时，继续遵循当前跟随状态。
@@ -75,11 +122,11 @@ export const MessageList = ({
     if (!content || !scroll) {
       return
     }
-    const observer = new ResizeObserver(scrollToBottom)
+    const observer = new ResizeObserver(followBottom)
     observer.observe(content)
     observer.observe(scroll)
     return () => observer.disconnect()
-  }, [isMobile, scrollToBottom])
+  }, [isMobile, followBottom])
 
   // 切换版本后将选择器留在原位置，避免回答长短变化导致操作区跳出视口。
   useLayoutEffect(() => {
@@ -96,8 +143,8 @@ export const MessageList = ({
       return
     }
     stickyRef.current = true
-    scrollToBottom()
-  }, [session.id, lastMessageId, scrollToBottom])
+    jumpToBottom()
+  }, [session.id, lastMessageId, jumpToBottom])
 
   useEffect(closeSearchPanel, [session.id, lastMessageId])
 
@@ -121,28 +168,65 @@ export const MessageList = ({
       return
     }
     if (stickyRef.current) {
-      scrollToBottom()
+      jumpToBottom()
     } else {
       el.scrollTop = scrollTopRef.current
     }
     const onScroll = () => {
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICKY_THRESHOLD
-      // 仅在用户向上滚动时停止跟随底部，布局或内容增高时保持跟随状态。
-      if (nearBottom) {
+      const top = el.scrollTop
+      const delta = top - scrollTopRef.current
+      const nearBottom = el.scrollHeight - top - el.clientHeight < STICKY_THRESHOLD
+      // 向上滚动（包括滚轮、拖滚动条、键盘）立即退出跟随，避免和动画互相拉扯。
+      if (delta < -1) {
+        stopFollow()
+      } else if (nearBottom) {
         stickyRef.current = true
-      } else if (el.scrollTop < scrollTopRef.current) {
-        stickyRef.current = false
       }
-      scrollTopRef.current = el.scrollTop
+      scrollTopRef.current = top
+    }
+    // 滚轮和触摸在滚动事件前就给出意图，先一步停掉跟随动画。
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) {
+        stopFollow()
+      }
+    }
+    let touchY = 0
+    const onTouchStart = (event: TouchEvent) => {
+      touchY = event.touches[0]?.clientY ?? 0
+    }
+    const onTouchMove = (event: TouchEvent) => {
+      const y = event.touches[0]?.clientY ?? 0
+      if (y - touchY > 4) {
+        stopFollow()
+      }
     }
     el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
-  }, [isMobile, scrollToBottom])
+    el.addEventListener('wheel', onWheel, { passive: true })
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+    }
+  }, [isMobile, jumpToBottom, stopFollow])
+
+  // 卸载时停掉未完成的缓动，避免回调持有已销毁的节点。
+  useEffect(
+    () => () => {
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current)
+        animationRef.current = null
+      }
+    },
+    []
+  )
 
   const lastIndex = messages.length - 1
   const uploadRetryId = getUploadRetryId(messages, streaming)
   return (
-    <ScrollToBottomContext.Provider value={scrollToBottom}>
+    <ScrollToBottomContext.Provider value={followBottom}>
       <div ref={isMobile ? undefined : scrollRef} className={styles.container}>
         <div ref={isMobile ? scrollRef : undefined} className={styles.scroll}>
           <div ref={contentRef} className={styles.column}>
