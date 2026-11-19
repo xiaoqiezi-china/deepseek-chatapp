@@ -22,8 +22,13 @@ export const MIRRORS: { name: string; prefix: string }[] = [
 
 const mirrorUrl = (prefix: string, url: string): string => (prefix ? prefix + url : url)
 
+/** Rust 安装命令回传的事件 */
+type RustUpdateEvent =
+  | { event: 'attempt'; data: { attempt: number; total: number; source: string } }
+  | { event: 'progress'; data: { percent: number | null } }
+
 const isTauri = (): boolean =>
-  typeof window !== 'undefined' && !!((window as TauriWindow).__TAURI_INTERNALS__)
+  typeof window !== 'undefined' && !!(window as TauriWindow).__TAURI_INTERNALS__
 
 const isAndroid = (): boolean => {
   if (typeof window === 'undefined') {
@@ -81,8 +86,15 @@ export const probeMirrors = async (
   })
   const settled = await Promise.allSettled(tasks)
   return settled
-    .filter((item): item is PromiseFulfilledResult<{ name: string; url: string; ms: number; manifest: Manifest }> =>
-      item.status === 'fulfilled'
+    .filter(
+      (
+        item
+      ): item is PromiseFulfilledResult<{
+        name: string
+        url: string
+        ms: number
+        manifest: Manifest
+      }> => item.status === 'fulfilled'
     )
     .map((item) => item.value)
     .sort((a, b) => a.ms - b.ms)
@@ -92,7 +104,8 @@ export const probeMirrors = async (
 export const checkForUpdate = async (): Promise<UpdateCheck> => {
   if (isTauri()) {
     const { check } = await import('@tauri-apps/plugin-updater')
-    const update = await check()
+    // 单个源卡住时尽快换下一个，避免启动检查长时间悬挂
+    const update = await check({ timeout: 6000 })
     if (!update) {
       return { status: 'latest', source: 'tauri' }
     }
@@ -143,24 +156,19 @@ export const installUpdate = async (
   onProgress?: (percent: number) => void
 ): Promise<void> => {
   if (isTauri()) {
-    const { check } = await import('@tauri-apps/plugin-updater')
-    const { relaunch } = await import('@tauri-apps/plugin-process')
-    const update = await check()
-    if (!update) {
-      return
-    }
-    let total = 0
-    let downloaded = 0
-    await update.downloadAndInstall((event) => {
-      if (event.event === 'Started') {
-        total = event.data.contentLength ?? 0
-      } else if (event.event === 'Progress') {
-        downloaded += event.data.chunkLength
-        if (total > 0) {
-          onProgress?.(Math.min(100, Math.round((downloaded / total) * 100)))
-        }
+    // 安装由 Rust 侧接管：直连失败会自动切换到 GitHub 镜像重试，
+    // 并逐块回传进度；Windows 上安装成功后进程会退出。
+    const { invoke, Channel } = await import('@tauri-apps/api/core')
+    const channel = new Channel<RustUpdateEvent>()
+    channel.onmessage = (message) => {
+      if (message.event === 'attempt') {
+        onProgress?.(-1)
+        return
       }
-    })
+      onProgress?.(message.data.percent ?? -1)
+    }
+    await invoke<string>('install_update', { onProgress: channel })
+    const { relaunch } = await import('@tauri-apps/plugin-process')
     await relaunch()
     return
   }

@@ -28,13 +28,8 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "nsis"
-    ],
-    "icon": [
-      "icons/icon.ico",
-      "icons/icon.png"
-    ],
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico", "icons/icon.png"],
     "copyright": "Copyright (c) 2026 DeepSeek",
     "category": "Productivity",
     "shortDescription": "Deepseek CE",
@@ -52,6 +47,7 @@
       "endpoints": [
         "https://gh-proxy.com/https://github.com/xiaoqiezi-china/deepseek-chatapp/releases/latest/download/latest.json",
         "https://ghfast.top/https://github.com/xiaoqiezi-china/deepseek-chatapp/releases/latest/download/latest.json",
+        "https://ghproxy.net/https://github.com/xiaoqiezi-china/deepseek-chatapp/releases/latest/download/latest.json",
         "https://github.com/xiaoqiezi-china/deepseek-chatapp/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNFMUU3RDYyQUU1QTUyNDcKUldSSFVscXVZbjBlUHFLaWJqRVMreGlBam92cXI5S3BBa2ZNZ2Nka2R1VG5nTVlYcXZRdi9Hb3YK"

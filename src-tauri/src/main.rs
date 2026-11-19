@@ -5,8 +5,10 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use tauri::ipc::Channel;
 use tauri::Manager;
+use tauri_plugin_updater::UpdaterExt;
 
 /// 进程启动时刻，用于测量到首帧的耗时。
 static START: OnceLock<Instant> = OnceLock::new();
@@ -434,6 +436,137 @@ fn report_startup(app: tauri::AppHandle, nav_ms: f64) -> Result<(), String> {
 }
 
 
+/// 更新下载源：直连优先（VPN 下最快），失败后依次切换 GitHub 加速镜像。
+const UPDATE_SOURCES: [(&str, &str); 4] = [
+  ("github", ""),
+  ("gh-proxy.com", "https://gh-proxy.com/"),
+  ("ghfast.top", "https://ghfast.top/"),
+  ("ghproxy.net", "https://ghproxy.net/"),
+];
+
+/// 安装进度：attempt 表示当前尝试的源，percent 为 None 时表示总大小未知。
+#[derive(Clone, serde::Serialize)]
+#[serde(tag = "event", content = "data")]
+enum UpdateEvent {
+  #[serde(rename = "attempt")]
+  Attempt { attempt: u32, total: u32, source: String },
+  #[serde(rename = "progress")]
+  Progress { percent: Option<u8> },
+}
+
+/// 记录更新过程，写入应用数据目录的 updater.log，便于用户反馈失败原因。
+fn log_update(app: &tauri::AppHandle, line: &str) {
+  let Ok(dir) = app.path().app_data_dir() else {
+    return;
+  };
+  let _ = fs::create_dir_all(&dir);
+  let seconds = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map(|elapsed| elapsed.as_secs())
+    .unwrap_or(0);
+  use std::io::Write;
+  if let Ok(mut file) = std::fs::OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(dir.join("updater.log"))
+  {
+    let _ = writeln!(file, "[{seconds}] {line}");
+  }
+}
+
+/// 下载并安装更新：安装包地址在各镜像间逐个回退，每个源都有独立超时，
+/// 校验失败或连接中断时自动换下一个源，避免单个 GitHub 直链失败就整体失败。
+#[tauri::command]
+async fn install_update(
+  app: tauri::AppHandle,
+  on_progress: Channel<UpdateEvent>,
+) -> Result<String, String> {
+  let updater = app
+    .updater_builder()
+    .timeout(Duration::from_secs(8))
+    .build()
+    .map_err(|error| format!("更新检查初始化失败: {error}"))?;
+  let Some(mut update) = updater
+    .check()
+    .await
+    .map_err(|error| format!("检查更新失败: {error}"))?
+  else {
+    log_update(&app, "check: already latest");
+    return Err("当前已是最新版本".into());
+  };
+  log_update(
+    &app,
+    &format!("check: {} -> {}", update.current_version, update.version),
+  );
+
+  let original = update.download_url.clone();
+  let mut candidates: Vec<(String, String)> = Vec::new();
+  for (name, prefix) in UPDATE_SOURCES {
+    let url = if prefix.is_empty() {
+      original.to_string()
+    } else {
+      format!("{prefix}{original}")
+    };
+    if !candidates.iter().any(|(_, existing)| existing == &url) {
+      candidates.push((name.to_string(), url));
+    }
+  }
+
+  let total = candidates.len() as u32;
+  let mut last_error = String::new();
+  for (index, (source, url)) in candidates.iter().enumerate() {
+    let target = url
+      .parse()
+      .map_err(|error| format!("更新地址无效: {error}"))?;
+    let _ = on_progress.send(UpdateEvent::Attempt {
+      attempt: index as u32 + 1,
+      total,
+      source: source.clone(),
+    });
+    log_update(
+      &app,
+      &format!("attempt {}/{}: {}", index + 1, total, source),
+    );
+    update.download_url = target;
+    // 直连在大陆网络常被重置，给较短超时尽快回退到镜像；
+    // 镜像本身较慢，留足下载时间。
+    update.timeout = Some(if source == "github" {
+      Duration::from_secs(30)
+    } else {
+      Duration::from_secs(300)
+    });
+
+    let channel = on_progress.clone();
+    let mut downloaded: u64 = 0;
+    let mut reported: i32 = -1;
+    let result = update
+      .download_and_install(
+        |chunk, content_length| {
+          downloaded += chunk as u64;
+          let percent = content_length
+            .filter(|total| *total > 0)
+            .map(|total| (downloaded.saturating_mul(100) / total).min(100) as u8);
+          let key = percent.map(i32::from).unwrap_or(-1);
+          if key != reported {
+            reported = key;
+            let _ = channel.send(UpdateEvent::Progress { percent });
+          }
+        },
+        || {},
+      )
+      .await;
+    match result {
+      Ok(()) => return Ok(source.clone()),
+      Err(error) => {
+        last_error = format!("{source}: {error}");
+        log_update(&app, &format!("failed: {last_error}"));
+      }
+    }
+  }
+
+  Err(format!("所有更新源均下载失败（{last_error}）"))
+}
+
 /// 启动阶段提升进程优先级，缩短 WebView2 初始化与首帧渲染时间。
 #[cfg(windows)]
 fn boost_startup_priority() {
@@ -456,7 +589,11 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
-    .invoke_handler(tauri::generate_handler![storage_request, report_startup])
+    .invoke_handler(tauri::generate_handler![
+      storage_request,
+      report_startup,
+      install_update
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
