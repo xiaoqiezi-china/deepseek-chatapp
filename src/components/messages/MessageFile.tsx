@@ -7,6 +7,7 @@ import { IconPhotoErrorFill20, IconRefreshOutline16 } from '../base/icons.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { FileCard } from '../files/FileCard.js'
 import { useFileView } from '../files/useFileView.js'
+import { openAttachmentPreview } from '../attachments/attachmentPreviewState.js'
 import styles from './MessageFile.module.css'
 
 /** 历史或失效附件的补传状态：只在还没有 serverId 时显示 */
@@ -112,11 +113,17 @@ export const MessageFile = ({
       )
     }
 
-    // 正常态：链接到原件
-    return link ? (
-      <a className={clsx(styles.image, styles.imageThumb)} {...link} title={file.name}>
+    // 正常态：在应用内放大预览
+    return url ? (
+      <button
+        type="button"
+        className={clsx(styles.image, styles.imageThumb)}
+        title={file.name}
+        aria-label={file.name}
+        onClick={() => openAttachmentPreview(file.id, file.name)}
+      >
         {preview}
-      </a>
+      </button>
     ) : (
       // 原件还没加载出来（极短暂）
       <div className={styles.image} />

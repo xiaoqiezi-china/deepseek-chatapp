@@ -13,6 +13,7 @@
   background-color: var(--dsw-alias-markdown-placeholder);
   font: inherit;
   text-decoration: none;
+  appearance: none;
 
   img {
     display: block;

@@ -7,6 +7,7 @@ import { IconCloseFill14, IconRefreshOutline16 } from '../base/icons.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { FileCard } from '../files/FileCard.js'
 import { useFileView } from '../files/useFileView.js'
+import { openAttachmentPreview } from '../attachments/attachmentPreviewState.js'
 import styles from './ChatInput.module.css'
 
 const UPLOADING: UploadTask = { status: 'uploading' }
@@ -65,7 +66,18 @@ const AttachmentItem = ({
       className={clsx(styles.attachment, failed && styles.attachmentFailed)}
       title={error ?? item.file.name}
     >
-      {link && status === 'done' ? <a {...link}>{preview}</a> : preview}
+      {status === 'done' && url ? (
+        <button
+          type="button"
+          className={styles.preview}
+          aria-label={item.file.name}
+          onClick={() => openAttachmentPreview(item.file, item.file.name)}
+        >
+          {preview}
+        </button>
+      ) : (
+        preview
+      )}
       {status === 'uploading' ? <div className={styles.uploading} /> : null}
       {failed && retry ? (
         <Tooltip content={retryLabel}>

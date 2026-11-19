@@ -22,8 +22,21 @@ export const useFileView = (source: File | string, name: string) => {
   const [state, setState] = useState<{ source: File | string; type: string; url: string | null }>()
   useEffect(() => {
     let active = true
-    const original = typeof source === 'string' ? loadFile(source) : Promise.resolve(source)
-    const pending = original
+    // 消息发出后原件由异步保存流程写入，首次读取可能 404；短暂重试避免缩略图退化成文件卡片。
+    const loadOriginal = async (): Promise<Blob | undefined> => {
+      if (typeof source !== 'string') {
+        return source
+      }
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const blob = await loadFile(source)
+        if (blob || !active || attempt === 4) {
+          return blob
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
+      return undefined
+    }
+    const pending = loadOriginal()
       .then((blob) => (active && blob ? createViewUrl(blob, type) : null))
       .catch(() => null)
     void pending.then((url) => {

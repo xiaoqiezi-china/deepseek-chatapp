@@ -19,6 +19,11 @@ import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { AccountDialog } from '../components/account/AccountDialog.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
+import { AttachmentPreview } from '../components/attachments/AttachmentPreview.js'
+import {
+  closeAttachmentPreview,
+  useAttachmentPreview,
+} from '../components/attachments/attachmentPreviewState.js'
 import { isUpdaterSupported } from '../services/updater.js'
 import { checkUpdate, useUpdateStore } from '../services/updateStore.js'
 import { onUploadNotice } from '../services/attachments.js'
@@ -84,6 +89,10 @@ export const App = () => {
     let remove: (() => void) | undefined
     void import('@capacitor/app').then(async ({ App: CapacitorApp }) => {
       const listener = await CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+        if (useAttachmentPreview.getState().preview) {
+          closeAttachmentPreview()
+          return
+        }
         if (useMobileSider.getState().open) {
           closeMobileSider()
           return
@@ -195,6 +204,7 @@ export const App = () => {
       </div>
       <SettingsDialog />
       <AccountDialog />
+      <AttachmentPreview />
       <Toast />
     </>
   )
