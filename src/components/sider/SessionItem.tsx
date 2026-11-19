@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { memo, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import {
   IconCheckOutline16,
@@ -37,7 +37,63 @@ export const SessionItem = memo(function SessionItem({
   const t = useTranslate()
   const [editing, setEditing] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  // 长按：按住不动 480ms 打开会话菜单，移动超过阈值则视为滚动
+  const press = useRef<{
+    timer: ReturnType<typeof setTimeout>
+    x: number
+    y: number
+    fired: boolean
+  } | null>(null)
+  // 长按后松手会补发一次 click，用它拦掉，避免误切换会话
+  const suppressClick = useRef(false)
   const displayTitle = session.title || t('untitledChat')
+
+  const cancelPress = () => {
+    if (press.current) {
+      clearTimeout(press.current.timer)
+      press.current = null
+    }
+  }
+
+  useEffect(() => cancelPress, [])
+
+  const onTouchStart = (event: React.TouchEvent) => {
+    suppressClick.current = false
+    if (selectionMode) {
+      return
+    }
+    const touch = event.touches[0]
+    cancelPress()
+    press.current = {
+      timer: setTimeout(() => {
+        if (!press.current) {
+          return
+        }
+        press.current.fired = true
+        suppressClick.current = true
+        setMenuOpen(true)
+        try {
+          navigator.vibrate?.(8)
+        } catch {
+          // 部分浏览器不支持震动，忽略
+        }
+      }, 480),
+      x: touch.clientX,
+      y: touch.clientY,
+      fired: false,
+    }
+  }
+
+  const onTouchMove = (event: React.TouchEvent) => {
+    const current = press.current
+    if (!current || current.fired) {
+      return
+    }
+    const touch = event.touches[0]
+    if (Math.abs(touch.clientX - current.x) > 10 || Math.abs(touch.clientY - current.y) > 10) {
+      cancelPress()
+    }
+  }
 
   if (editing) {
     const finish = (title: string) => {
@@ -65,6 +121,11 @@ export const SessionItem = memo(function SessionItem({
   }
 
   const onClick = () => {
+    if (suppressClick.current) {
+      suppressClick.current = false
+      return
+    }
+    cancelPress()
     if (selectionMode) {
       onToggleSelect()
       return
@@ -83,6 +144,18 @@ export const SessionItem = memo(function SessionItem({
         menuOpen && styles.menuOpen
       )}
       onClick={onClick}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={cancelPress}
+      onTouchCancel={cancelPress}
+      onContextMenu={(event) => {
+        if (selectionMode) {
+          return
+        }
+        // 移动端长按会弹出系统菜单，这里统一换成本地会话菜单
+        event.preventDefault()
+        setMenuOpen(true)
+      }}
     >
       <span
         className={clsx(
@@ -98,6 +171,7 @@ export const SessionItem = memo(function SessionItem({
       {selectionMode ? null : (
         <div className={styles.action} onClick={(event) => event.stopPropagation()}>
           <Menu
+            open={menuOpen}
             onOpenChange={setMenuOpen}
             options={[
               {

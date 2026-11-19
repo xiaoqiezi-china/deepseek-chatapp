@@ -10,6 +10,9 @@
   line-height: 22px;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 
   &.active {
     background-color: var(--dsw-specific-sidebar-nav-item-active-accent);
@@ -44,6 +47,11 @@
   display: none;
   flex-shrink: 0;
   margin-left: 4px;
+}
+
+/* 长按/右键唤起菜单时，即使没有 hover 也要露出触发元素作为锚点 */
+.menuOpen .action {
+  display: flex;
 }
 
 .renameInput {

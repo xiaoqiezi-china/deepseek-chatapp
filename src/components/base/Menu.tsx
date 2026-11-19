@@ -12,20 +12,26 @@ export type MenuOption = {
   onSelect: () => void
 }
 
-/** 点击触发，向下展开；点外部或 Esc 关闭 */
+/** 点击触发，向下展开；点外部或 Esc 关闭。传入 open 时由调用方控制开关（如长按唤起） */
 export const Menu = ({
   options,
   children,
+  open: controlledOpen,
   onOpenChange,
 }: {
   options: MenuOption[]
   children: (props: { open: boolean; toggle: () => void }) => ReactNode
+  /** 受控打开状态；不传则内部自行管理 */
+  open?: boolean
   /** 打开状态变化时通知调用方，用于在菜单打开期间保持触发元素可见 */
   onOpenChange?: (open: boolean) => void
 }) => {
-  const [open, setOpenState] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
   const setOpen = (next: boolean) => {
-    setOpenState(next)
+    if (controlledOpen === undefined) {
+      setInternalOpen(next)
+    }
     onOpenChange?.(next)
   }
   const close = () => setOpen(false)

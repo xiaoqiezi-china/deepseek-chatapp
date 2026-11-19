@@ -204,14 +204,25 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
-.drawer {
+/* 外层只负责进场/退场位移，内层负责手指拖拽位移，互不覆盖 */
+.drawerWrap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 800;
   animation: drawerIn 0.24s var(--ds-ease-out-back) both;
-  touch-action: pan-y;
   will-change: transform;
 }
 
-.drawerClosing {
+.drawerWrapClosing {
   animation: drawerOut 0.2s var(--ds-ease-in-out) both;
+}
+
+.drawer {
+  height: 100%;
+  touch-action: pan-y;
+  will-change: transform;
 }
 
 @keyframes drawerIn {
@@ -222,14 +233,6 @@
 @keyframes drawerOut {
   from { transform: translateX(0); opacity: 1; }
   to { transform: translateX(-100%); opacity: 0.6; }
-}
-
-.drawer {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 800;
 }
 
 .drawerMask {
