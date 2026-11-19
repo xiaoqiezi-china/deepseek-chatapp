@@ -1,0 +1,115 @@
+/* 裁剪弹窗：比默认 Modal 宽，内容随图片显示尺寸变化 */
+.dialog {
+  width: auto;
+  padding: 16px 18px 18px;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.preset {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  transition:
+    color 0.15s var(--ds-ease-in-out),
+    border-color 0.15s var(--ds-ease-in-out);
+}
+
+.preset:hover:not(:disabled) {
+  color: var(--dsw-alias-brand-primary);
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.preset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background-color: #000;
+  touch-action: none;
+  user-select: none;
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  cursor: move;
+  touch-action: none;
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.35) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.35) 1px, transparent 1px);
+  background-size: 33.33% 33.33%;
+  background-position: 33.33% 33.33%;
+  pointer-events: none;
+}
+
+/* 手柄放在裁剪框内侧：裁剪框贴边时也不会被舞台圆角裁掉 */
+.handle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--dsw-alias-brand-primary);
+  box-sizing: border-box;
+  touch-action: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.nw {
+  left: 2px;
+  top: 2px;
+  cursor: nwse-resize;
+}
+
+.ne {
+  right: 2px;
+  top: 2px;
+  cursor: nesw-resize;
+}
+
+.sw {
+  left: 2px;
+  bottom: 2px;
+  cursor: nesw-resize;
+}
+
+.se {
+  right: 2px;
+  bottom: 2px;
+  cursor: nwse-resize;
+}

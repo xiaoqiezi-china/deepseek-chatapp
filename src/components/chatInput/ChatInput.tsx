@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   IconGlobeLanguageOutline14,
   IconPaperclipOutline16,
@@ -28,6 +28,8 @@ import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
 import { ACCEPT, useUploads } from '../../services/attachments.js'
 import { DraftAttachments } from './DraftAttachments.js'
+import { CameraButton } from './CameraButton.js'
+import { CropDialog } from '../attachments/CropDialog.js'
 import { useVoiceInput } from './useVoiceInput.js'
 import { VoiceButton } from './VoiceButton.js'
 import { Spectrum } from './Spectrum.js'
@@ -54,6 +56,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [photo, setPhoto] = useState<File | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
 
@@ -241,6 +244,11 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               }
             }}
           />
+          <CameraButton
+            disabled={importingHistory}
+            beforeOpen={() => ensureApiKey()}
+            onCapture={(file) => setPhoto(file)}
+          />
           <IconButton
             size="m"
             tone="primary"
@@ -285,6 +293,16 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           )}
         </div>
       </div>
+      {photo ? (
+        <CropDialog
+          file={photo}
+          onCancel={() => setPhoto(null)}
+          onConfirm={(cropped) => {
+            setPhoto(null)
+            acceptFiles([cropped])
+          }}
+        />
+      ) : null}
       {dragging ? <DragMask /> : null}
     </div>
   )

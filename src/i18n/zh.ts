@@ -239,4 +239,13 @@ export const zh = {
   updateDownloadingGeneric: '正在下载更新…',
   settingDialogAsideAboutOptionLabel: '关于',
   aboutVersion: '版本 {version}',
+  takePhoto: '拍照',
+  cameraShutter: '拍摄',
+  cameraUnavailable: '无法打开相机，请改用文件选择',
+  cameraChooseFile: '选择图片',
+  cameraFailed: '拍照失败，请重试',
+  cropTitle: '裁剪图片',
+  cropUse: '使用',
+  cropSquare: '正方形',
+  cropReset: '重置',
 } as const

@@ -567,3 +567,14 @@ export const IconInfoOutline16 = () => (
     <circle cx="8" cy="4.9" r="0.85" fill="currentColor" />
   </svg>
 )
+
+export const IconCameraOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M6.40039 3.2002H9.59961C9.90632 3.20038 10.1929 3.34862 10.3682 3.59668L11.0068 4.5H13.5C14.2732 4.5 14.9004 5.1272 14.9004 5.90039V12.0996C14.9004 12.8728 14.2732 13.5 13.5 13.5H2.5C1.7268 13.5 1.09961 12.8728 1.09961 12.0996V5.90039C1.09961 5.1272 1.7268 4.5 2.5 4.5H4.99316L5.63184 3.59668C5.80709 3.34862 6.09368 3.20038 6.40039 3.2002Z"
+      stroke="currentColor"
+      strokeWidth={1.2}
+    />
+    <circle cx="8" cy="8.9" r="2.6" stroke="currentColor" strokeWidth={1.2} />
+  </svg>
+)

@@ -248,4 +248,13 @@ export const en = {
   updateDownloadingGeneric: 'Downloading update…',
   settingDialogAsideAboutOptionLabel: 'About',
   aboutVersion: 'Version {version}',
+  takePhoto: 'Take photo',
+  cameraShutter: 'Capture',
+  cameraUnavailable: 'Camera unavailable. Choose an image instead.',
+  cameraChooseFile: 'Choose image',
+  cameraFailed: 'Failed to take photo. Try again.',
+  cropTitle: 'Crop image',
+  cropUse: 'Use',
+  cropSquare: 'Square',
+  cropReset: 'Reset',
 } satisfies Record<keyof typeof zh, string>

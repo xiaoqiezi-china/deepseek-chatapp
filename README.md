@@ -44,7 +44,7 @@ The result is a small download, a short install and a launch that finishes in ab
 - **Sessions** — create, auto-title, rename, delete, group by date, multi-select and bulk delete.
 - **Editing** — edit a question or an AI reply; the edited text becomes context for later messages. Branch switching, regeneration and continuation are supported.
 - **Replies** — streaming output, reasoning, web search, link reading with citations and read-aloud.
-- **Attachments** — upload, paste or drag images and files; voice input with a live waveform.
+- **Attachments** — upload, paste or drag images and files; take a photo, crop it, then send; voice input with a live waveform.
 - **Rendering** — Markdown, syntax highlighting, KaTeX and Mermaid.
 - **Account** — sign in with an API key, view balance and available models, change the key.
 - **System prompt** — default identity prompt or a custom one; an empty custom prompt omits the `system` field.
