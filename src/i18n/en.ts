@@ -22,6 +22,7 @@ export const en = {
   sessionItemMenuRenameOption: 'Rename',
   more: 'More',
   close: 'Close',
+  scrollToBottom: 'Scroll to bottom',
   sessionHistoryTimelineLabelToday: 'Today',
   sessionHistoryTimelineLabelYesterday: 'Yesterday',
   sessionHistoryTimelineLabel7days: '7 Days',
@@ -231,7 +232,8 @@ export const en = {
   sessionItemMenuSelect: 'Select',
   deleteSelected: 'Delete selected',
   deleteSelectedModalTitle: 'Delete selected chats',
-  deleteSelectedModalDescription: 'This will delete the {count} selected chats and their attachments. This cannot be undone.',
+  deleteSelectedModalDescription:
+    'This will delete the {count} selected chats and their attachments. This cannot be undone.',
   systemPromptBuiltIn: 'Deepseek Community Edition · based on Chat-Demo',
   openDataDir: 'Open data folder',
   openDataDirDescription: 'View chats, attachments and settings in your file manager',

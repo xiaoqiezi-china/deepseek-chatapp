@@ -59,6 +59,51 @@
   user-select: none;
 }
 
+/* 用户上滑离开底部时，输入框上沿右侧出现一键回到底部 */
+.scrollToBottom {
+  position: absolute;
+  right: 4px;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 50%;
+  background-color: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+  cursor: pointer;
+  animation: scrollToBottomIn 0.18s var(--ds-ease-out-back) both;
+  transition:
+    color 0.15s var(--ds-ease-in-out),
+    border-color 0.15s var(--ds-ease-in-out),
+    transform 0.15s var(--ds-ease-in-out);
+}
+
+.scrollToBottom:hover {
+  color: var(--dsw-alias-brand-primary);
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.scrollToBottom:active {
+  transform: scale(0.94);
+}
+
+@keyframes scrollToBottomIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media not all and (min-width: 768px) {
   .inputContainer {
     position: relative;

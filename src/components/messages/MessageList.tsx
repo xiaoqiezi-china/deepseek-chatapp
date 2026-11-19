@@ -40,12 +40,15 @@ export const MessageList = ({
 }: {
   session: Session
   streaming: boolean
-  footer: React.ReactNode
+  footer:
+    | React.ReactNode
+    | ((state: { following: boolean; scrollToBottom: () => void }) => React.ReactNode)
 }) => {
   const isMobile = useIsMobile()
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef(true)
+  const [following, setFollowing] = useState(true)
   const scrollTopRef = useRef(0)
   const animationRef = useRef<number | null>(null)
   const restoreScrollRef = useRef<{ messageId: string; top: number } | null>(null)
@@ -72,14 +75,23 @@ export const MessageList = ({
     scrollTopRef.current = el.scrollTop
   }, [])
 
+  /** 同步跟随状态：只有变化时才触发重渲染（用于显示回到底部按钮） */
+  const updateFollowing = useCallback((next: boolean) => {
+    if (stickyRef.current === next) {
+      return
+    }
+    stickyRef.current = next
+    setFollowing(next)
+  }, [])
+
   /** 用户主动上滑：立刻停止跟随，内容继续增长也不再拉回底部 */
   const stopFollow = useCallback(() => {
-    stickyRef.current = false
+    updateFollowing(false)
     if (animationRef.current !== null) {
       cancelAnimationFrame(animationRef.current)
       animationRef.current = null
     }
-  }, [])
+  }, [updateFollowing])
 
   /**
    * 贴底时平滑跟随：每帧按剩余距离缓动，内容持续增长也只会匀速下滑，
@@ -115,6 +127,12 @@ export const MessageList = ({
     animationRef.current = requestAnimationFrame(step)
   }, [])
 
+  /** 回到底部按钮：恢复跟随并平滑滑到底 */
+  const scrollToBottom = useCallback(() => {
+    updateFollowing(true)
+    followBottom()
+  }, [updateFollowing, followBottom])
+
   // 内容、键盘和输入框高度变化时，继续遵循当前跟随状态。
   useLayoutEffect(() => {
     const content = contentRef.current
@@ -143,6 +161,7 @@ export const MessageList = ({
       return
     }
     stickyRef.current = true
+    setFollowing(true)
     jumpToBottom()
   }, [session.id, lastMessageId, jumpToBottom])
 
@@ -180,13 +199,13 @@ export const MessageList = ({
       if (delta < -1) {
         stopFollow()
       } else if (nearBottom) {
-        stickyRef.current = true
+        updateFollowing(true)
       }
       scrollTopRef.current = top
     }
     // 滚轮和触摸在滚动事件前就给出意图，先一步停掉跟随动画。
     const onWheel = (event: WheelEvent) => {
-      if (event.deltaY < 0) {
+      if (event.deltaY < 0 && el.scrollTop > 0) {
         stopFollow()
       }
     }
@@ -196,7 +215,7 @@ export const MessageList = ({
     }
     const onTouchMove = (event: TouchEvent) => {
       const y = event.touches[0]?.clientY ?? 0
-      if (y - touchY > 4) {
+      if (y - touchY > 4 && el.scrollTop > 0) {
         stopFollow()
       }
     }
@@ -210,7 +229,7 @@ export const MessageList = ({
       el.removeEventListener('touchstart', onTouchStart)
       el.removeEventListener('touchmove', onTouchMove)
     }
-  }, [isMobile, jumpToBottom, stopFollow])
+  }, [isMobile, jumpToBottom, stopFollow, updateFollowing])
 
   // 卸载时停掉未完成的缓动，避免回调持有已销毁的节点。
   useEffect(
@@ -258,7 +277,7 @@ export const MessageList = ({
             )}
           </div>
         </div>
-        {footer}
+        {typeof footer === 'function' ? footer({ following, scrollToBottom }) : footer}
       </div>
     </ScrollToBottomContext.Provider>
   )
