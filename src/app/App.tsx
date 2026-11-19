@@ -25,7 +25,7 @@ import { onUploadNotice } from '../services/attachments.js'
 import { Button } from '../components/base/Button.js'
 import { stopReadAloud } from '../services/speech/readAloud.js'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
-import { closeMobileSider } from '../components/sider/mobileSiderState.js'
+import { closeMobileSider, useMobileSider } from '../components/sider/mobileSiderState.js'
 import { MobileSider, Sider } from '../components/sider/Sider.js'
 import styles from './App.module.css'
 
@@ -69,6 +69,44 @@ export const App = () => {
   useEffect(stopReadAloud, [activeId])
   // 移动端选中会话、切换布局后收起抽屉
   useEffect(closeMobileSider, [activeId, isMobile])
+
+  // Android 返回键/屏幕边缘返回手势：抽屉打开时先关抽屉，否则沿用系统默认行为
+  useEffect(() => {
+    const cap = (
+      window as Window & {
+        Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string }
+      }
+    ).Capacitor
+    if (!cap?.isNativePlatform?.() || cap.getPlatform?.() !== 'android') {
+      return
+    }
+    let disposed = false
+    let remove: (() => void) | undefined
+    void import('@capacitor/app').then(async ({ App: CapacitorApp }) => {
+      const listener = await CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+        if (useMobileSider.getState().open) {
+          closeMobileSider()
+          return
+        }
+        if (canGoBack) {
+          window.history.back()
+        } else {
+          void CapacitorApp.exitApp()
+        }
+      })
+      if (disposed) {
+        void listener.remove()
+      } else {
+        remove = () => {
+          void listener.remove()
+        }
+      }
+    })
+    return () => {
+      disposed = true
+      remove?.()
+    }
+  }, [])
 
   // 桌面端启动后静默检查更新，有新版时提示去设置里更新
   useEffect(() => {

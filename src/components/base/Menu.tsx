@@ -18,6 +18,7 @@ export const Menu = ({
   children,
   open: controlledOpen,
   onOpenChange,
+  anchorPoint,
 }: {
   options: MenuOption[]
   children: (props: { open: boolean; toggle: () => void }) => ReactNode
@@ -25,6 +26,8 @@ export const Menu = ({
   open?: boolean
   /** 打开状态变化时通知调用方，用于在菜单打开期间保持触发元素可见 */
   onOpenChange?: (open: boolean) => void
+  /** 长按菜单：按手指位置定位；不传则锚定触发按钮 */
+  anchorPoint?: { x: number; y: number } | null
 }) => {
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
@@ -35,10 +38,15 @@ export const Menu = ({
     onOpenChange?.(next)
   }
   const close = () => setOpen(false)
-  // 左侧对齐并再左移 5px，让菜单文字与触发元素图标对齐
+  // 普通点击对齐触发按钮；长按则把菜单中心放在手指落点，空间不够自动翻到上方
   const { anchorRef, floatingRef, position } = useAnchoredPosition<HTMLSpanElement, HTMLDivElement>(
     open,
-    { align: 'start', alignOffset: -5, offset: 4 }
+    {
+      anchorPoint,
+      align: anchorPoint ? 'center' : 'start',
+      alignOffset: anchorPoint ? 0 : -5,
+      offset: anchorPoint ? 10 : 4,
+    }
   )
   useDismiss(open, [anchorRef, floatingRef], close)
 

@@ -37,6 +37,8 @@ export const SessionItem = memo(function SessionItem({
   const t = useTranslate()
   const [editing, setEditing] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  // 长按/右键时菜单跟随落点；从「更多」按钮打开时清空，回到按钮锚定
+  const [menuPoint, setMenuPoint] = useState<{ x: number; y: number } | null>(null)
   // 长按：按住不动 480ms 打开会话菜单，移动超过阈值则视为滚动
   const press = useRef<{
     timer: ReturnType<typeof setTimeout>
@@ -71,6 +73,7 @@ export const SessionItem = memo(function SessionItem({
         }
         press.current.fired = true
         suppressClick.current = true
+        setMenuPoint({ x: press.current.x, y: press.current.y })
         setMenuOpen(true)
         try {
           navigator.vibrate?.(8)
@@ -154,6 +157,7 @@ export const SessionItem = memo(function SessionItem({
         }
         // 移动端长按会弹出系统菜单，这里统一换成本地会话菜单
         event.preventDefault()
+        setMenuPoint({ x: event.clientX, y: event.clientY })
         setMenuOpen(true)
       }}
     >
@@ -172,7 +176,13 @@ export const SessionItem = memo(function SessionItem({
         <div className={styles.action} onClick={(event) => event.stopPropagation()}>
           <Menu
             open={menuOpen}
-            onOpenChange={setMenuOpen}
+            anchorPoint={menuPoint}
+            onOpenChange={(open) => {
+              setMenuOpen(open)
+              if (!open) {
+                setMenuPoint(null)
+              }
+            }}
             options={[
               {
                 key: 'select',
@@ -196,7 +206,14 @@ export const SessionItem = memo(function SessionItem({
             ]}
           >
             {({ toggle }) => (
-              <IconButton icon={<IconEllipsisOutline16 />} aria-label={t('more')} onClick={toggle} />
+              <IconButton
+                icon={<IconEllipsisOutline16 />}
+                aria-label={t('more')}
+                onClick={() => {
+                  setMenuPoint(null)
+                  toggle()
+                }}
+              />
             )}
           </Menu>
         </div>

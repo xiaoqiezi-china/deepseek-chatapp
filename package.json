@@ -19,6 +19,7 @@
     "release:desktop": "node scripts/publish-release.mjs"
   },
   "dependencies": {
+    "@capacitor/app": "7.0.0",
     "@capacitor/camera": "^7.0.5",
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.14.1",

@@ -261,128 +261,155 @@ export const MobileSider = () => {
   const open = useMobileSider((state) => state.open)
   const closing = useMobileSider((state) => state.closing)
   const drawerRef = useRef<HTMLDivElement | null>(null)
-  const gesture = useRef<{
-    x: number
-    y: number
-    axis: 'horizontal' | 'vertical' | null
-    offset: number
-    lastAt: number
-    lastOffset: number
-    velocity: number
-  } | null>(null)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    let start: {
+      x: number
+      y: number
+      axis: 'horizontal' | 'vertical' | null
+      offset: number
+      lastAt: number
+      lastOffset: number
+      velocity: number
+    } | null = null
+
+    /** 直接写 transform，避免拖动时整棵会话列表跟着重渲染 */
+    const applyOffset = (offset: number) => {
+      const drawer = drawerRef.current
+      if (!drawer) {
+        return
+      }
+      drawer.style.transition = 'none'
+      drawer.style.transform = offset ? `translateX(${offset}px)` : ''
+    }
+
+    const settleBack = () => {
+      const drawer = drawerRef.current
+      if (!drawer) {
+        return
+      }
+      drawer.style.transition = 'transform 0.22s var(--ds-ease-out-back)'
+      // 先强制一次样式计算，让过渡从当前位移开始，避免直接跳回原点
+      void drawer.offsetWidth
+      drawer.style.transform = ''
+      window.setTimeout(() => {
+        if (drawerRef.current === drawer) {
+          drawer.style.transition = ''
+        }
+      }, 260)
+    }
+
+    /** 拖动结束后浏览器可能补发一次 click，拦掉它，避免误触按钮或切换会话 */
+    const swallowNextClick = () => {
+      const stop = (event: Event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      document.addEventListener('click', stop, { capture: true, once: true })
+      window.setTimeout(() => document.removeEventListener('click', stop, true), 400)
+    }
+
+    // 抽屉和右侧遮罩都属于关闭手势的范围：从任意位置向左划都能收起
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) {
+        start = null
+        return
+      }
+      const touch = event.touches[0]
+      start = {
+        x: touch.clientX,
+        y: touch.clientY,
+        axis: null,
+        offset: 0,
+        lastAt: performance.now(),
+        lastOffset: 0,
+        velocity: 0,
+      }
+      applyOffset(0)
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (!start || event.touches.length !== 1) {
+        return
+      }
+      const touch = event.touches[0]
+      const dx = touch.clientX - start.x
+      const dy = touch.clientY - start.y
+      if (!start.axis) {
+        // 先判定方向：横向占优才当作滑动关闭，否则交给列表滚动
+        if (Math.abs(dx) > 7 && Math.abs(dx) >= Math.abs(dy) * 0.9) {
+          start.axis = 'horizontal'
+        } else if (Math.abs(dy) > 7) {
+          start.axis = 'vertical'
+          return
+        } else {
+          return
+        }
+      }
+      if (start.axis !== 'horizontal') {
+        return
+      }
+      // 非 passive 监听，横滑时阻止浏览器把手势识别成前进/后退或页面滚动
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+      // 只跟随向左的拖动，向右拖动保持原位
+      const offset = Math.min(0, dx)
+      const now = performance.now()
+      start.velocity = (offset - start.lastOffset) / Math.max(1, now - start.lastAt)
+      start.lastAt = now
+      start.lastOffset = offset
+      start.offset = offset
+      applyOffset(offset)
+    }
+
+    const onTouchEnd = () => {
+      if (!start) {
+        return
+      }
+      const ended = start
+      start = null
+      if (ended.axis !== 'horizontal') {
+        applyOffset(0)
+        return
+      }
+      if (ended.offset < -6) {
+        swallowNextClick()
+      }
+      const drawer = drawerRef.current
+      const threshold = Math.min(72, Math.max(36, (drawer?.offsetWidth ?? 300) * 0.16))
+      // 拖动距离够深，或足够快的甩出（速度乘以时长）都判定为关闭
+      const flung =
+        ended.offset <= -24 &&
+        ended.velocity < -0.5 &&
+        performance.now() - ended.lastAt < 160
+      if (ended.offset <= -threshold || flung) {
+        // 保持当前位移，让退场动画从这里继续向左
+        closeMobileSider()
+        return
+      }
+      settleBack()
+    }
+
+    document.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
+    document.addEventListener('touchmove', onTouchMove, { capture: true, passive: false })
+    document.addEventListener('touchend', onTouchEnd, { capture: true })
+    document.addEventListener('touchcancel', onTouchEnd, { capture: true })
+    return () => {
+      start = null
+      document.removeEventListener('touchstart', onTouchStart, { capture: true })
+      document.removeEventListener('touchmove', onTouchMove, { capture: true })
+      document.removeEventListener('touchend', onTouchEnd, { capture: true })
+      document.removeEventListener('touchcancel', onTouchEnd, { capture: true })
+    }
+  }, [open])
 
   if (!open) {
     return null
-  }
-
-  /** 直接写 transform，避免拖动时整棵会话列表跟着重渲染 */
-  const applyOffset = (offset: number) => {
-    const drawer = drawerRef.current
-    if (!drawer) {
-      return
-    }
-    drawer.style.transition = 'none'
-    drawer.style.transform = offset ? `translateX(${offset}px)` : ''
-  }
-
-  const settleBack = () => {
-    const drawer = drawerRef.current
-    if (!drawer) {
-      return
-    }
-    drawer.style.transition = 'transform 0.22s var(--ds-ease-out-back)'
-    // 先强制一次样式计算，让过渡从当前位移开始，避免直接跳回原点
-    void drawer.offsetWidth
-    drawer.style.transform = ''
-    window.setTimeout(() => {
-      if (drawerRef.current === drawer) {
-        drawer.style.transition = ''
-      }
-    }, 260)
-  }
-
-  const onTouchStart = (event: React.TouchEvent) => {
-    const touch = event.touches[0]
-    gesture.current = {
-      x: touch.clientX,
-      y: touch.clientY,
-      axis: null,
-      offset: 0,
-      lastAt: performance.now(),
-      lastOffset: 0,
-      velocity: 0,
-    }
-    applyOffset(0)
-  }
-
-  const onTouchMove = (event: React.TouchEvent) => {
-    const start = gesture.current
-    if (!start) {
-      return
-    }
-    const touch = event.touches[0]
-    const dx = touch.clientX - start.x
-    const dy = touch.clientY - start.y
-    if (!start.axis) {
-      // 先判定方向：横向明显占优才当作滑动关闭，否则交给列表滚动
-      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.3) {
-        start.axis = 'horizontal'
-      } else if (Math.abs(dy) > 8) {
-        start.axis = 'vertical'
-        return
-      } else {
-        return
-      }
-    }
-    if (start.axis !== 'horizontal') {
-      return
-    }
-    // 只跟随向左的拖动，向右拖动保持原位
-    const offset = Math.min(0, dx)
-    const now = performance.now()
-    start.velocity = (offset - start.lastOffset) / Math.max(1, now - start.lastAt)
-    start.lastAt = now
-    start.lastOffset = offset
-    start.offset = offset
-    applyOffset(offset)
-  }
-
-  /** 拖动结束后浏览器可能补发一次 click，拦掉它，避免误触按钮或切换会话 */
-  const swallowNextClick = () => {
-    const stop = (event: Event) => {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-    document.addEventListener('click', stop, { capture: true, once: true })
-    window.setTimeout(() => document.removeEventListener('click', stop, true), 400)
-  }
-
-  const onTouchEnd = () => {
-    const start = gesture.current
-    gesture.current = null
-    if (!start) {
-      return
-    }
-    if (start.axis !== 'horizontal') {
-      applyOffset(0)
-      return
-    }
-    if (start.offset < -6) {
-      swallowNextClick()
-    }
-    const drawer = drawerRef.current
-    const threshold = Math.min(112, Math.max(56, (drawer?.offsetWidth ?? 300) * 0.26))
-    // 拖动距离够深，或足够快的甩出（速度乘以时长）都判定为关闭
-    const flung =
-      start.offset < -36 &&
-      start.velocity < -0.6 &&
-      performance.now() - start.lastAt < 120
-    if (start.offset < -threshold || flung) {
-      // 保持当前位移，让退场动画从这里继续向左
-      closeMobileSider()
-      return
-    }
-    settleBack()
   }
 
   return (
@@ -392,14 +419,7 @@ export const MobileSider = () => {
         onClick={closeMobileSider}
       />
       <div className={clsx(styles.drawerWrap, closing && styles.drawerWrapClosing)}>
-        <div
-          ref={drawerRef}
-          className={styles.drawer}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          onTouchCancel={onTouchEnd}
-        >
+        <div ref={drawerRef} className={styles.drawer}>
           <Sider mobile />
         </div>
       </div>

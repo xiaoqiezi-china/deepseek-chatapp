@@ -21,7 +21,12 @@ export type AnchoredPosition = {
   maxHeight?: number
 }
 
+/** 虚拟锚点：没有触发元素时，直接按屏幕坐标摆放浮层（如长按位置） */
+export type AnchorPoint = { x: number; y: number }
+
 export type AnchoredOptions = {
+  /** 用屏幕坐标代替触发元素作为锚点 */
+  anchorPoint?: AnchorPoint | null
   /** 优先出现的一侧，放不下时翻到另一侧 */
   side?: Side
   /** 相对触发元素的水平对齐方式 */
@@ -85,6 +90,7 @@ const resolveSide = (spaceAbove: number, spaceBelow: number, preferred: Side, ne
 export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement>(
   open: boolean,
   {
+    anchorPoint = null,
     side = 'bottom',
     align = 'start',
     alignOffset = 0,
@@ -123,16 +129,34 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
 
   // 测量只在浮层打开且已挂载后进行，ref 对象稳定，回调不随渲染重建
   const update = useCallback(() => {
-    const anchor = getAnchor()
     const floating = floatingRef.current
-    if (!anchor || !floating) {
+    if (!floating) {
       return
     }
-    const rect = anchor.getBoundingClientRect()
-    // 触发元素被隐藏时（如父级 hover 结束、display: none），矩形全为 0；
-    // 此时保留上一次的位置，避免浮层跳到视口左上角。
-    if (rect.width === 0 && rect.height === 0) {
-      return
+    let rect: DOMRect
+    if (anchorPoint) {
+      // 虚拟锚点没有盒模型，按长按位置构造一个零尺寸矩形
+      rect = {
+        left: anchorPoint.x,
+        right: anchorPoint.x,
+        top: anchorPoint.y,
+        bottom: anchorPoint.y,
+        width: 0,
+        height: 0,
+        x: anchorPoint.x,
+        y: anchorPoint.y,
+      } as DOMRect
+    } else {
+      const anchor = getAnchor()
+      if (!anchor) {
+        return
+      }
+      rect = anchor.getBoundingClientRect()
+      // 触发元素被隐藏时（如父级 hover 结束、display: none），矩形全为 0；
+      // 此时保留上一次的位置，避免浮层跳到视口左上角。
+      if (rect.width === 0 && rect.height === 0) {
+        return
+      }
     }
     const spaceAbove = rect.top - offset - VIEWPORT_PADDING
     const spaceBelow = window.innerHeight - rect.bottom - offset - VIEWPORT_PADDING
@@ -159,7 +183,18 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
       right: Math.max(VIEWPORT_PADDING, window.innerWidth - rect.right),
       maxHeight: height,
     })
-  }, [align, alignOffset, applyPosition, floatingRef, getAnchor, maxHeight, minSpace, offset, side])
+  }, [
+    align,
+    alignOffset,
+    anchorPoint,
+    applyPosition,
+    floatingRef,
+    getAnchor,
+    maxHeight,
+    minSpace,
+    offset,
+    side,
+  ])
 
   // 打开时与内容变化时同步测量，必须在绘制前完成
   useLayoutEffect(() => {
