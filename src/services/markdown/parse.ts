@@ -25,6 +25,60 @@ declare module 'mdast' {
 
 const text = (value: string): Text => ({ type: 'text', value })
 
+/** 货币金额里的 $ 会被单美元数学语法误判为公式定界符，解析前先替换成占位符。 */
+const CURRENCY = '\uE000'
+const MONEY = /\d[\d,]*\.\d{2}/
+
+const escapeCurrency = (input: string): string => {
+  const lines = input.split('\n')
+  return lines
+    .map((line) => {
+      let output = ''
+      let index = 0
+      while (index < line.length) {
+        const char = line[index]
+        if (char !== '$' || (index > 0 && line[index - 1] === '\\')) {
+          output += char
+          index += 1
+          continue
+        }
+        if (line[index + 1] === '$') {
+          output += '$$'
+          index += 2
+          continue
+        }
+        let end = index + 1
+        while (end < line.length) {
+          if (line[end] === '$' && line[end - 1] !== '\\' && line[end + 1] !== '$') {
+            break
+          }
+          end += 1
+        }
+        if (end >= line.length) {
+          output += line.slice(index)
+          break
+        }
+        const content = line.slice(index + 1, end)
+        // 含加粗标记或两位小数的金额不可能是行内公式，按普通文本保留。
+        output +=
+          content.includes('**') || MONEY.test(content)
+            ? CURRENCY + content + CURRENCY
+            : line.slice(index, end + 1)
+        index = end + 1
+      }
+      return output
+    })
+    .join('\n')
+}
+
+const restoreCurrency = (node: Nodes): void => {
+  const record = node as Nodes & { value?: unknown; children?: Nodes[] }
+  if (typeof record.value === 'string') {
+    record.value = record.value.split(CURRENCY).join('$')
+  }
+  record.children?.forEach(restoreCurrency)
+}
+
 const BOLD = /(?<!\\)\*\*([^\n]+?)(?<!\\)\*\*/g
 
 /**
@@ -61,7 +115,7 @@ export function toMdAst(
   input: string,
   { sources, disableLink }: { sources: Source[] | undefined; disableLink: boolean }
 ): Root {
-  const ast = fromMarkdown(input, {
+  const ast = fromMarkdown(escapeCurrency(input), {
     extensions: [
       // codeIndented 语法导致有前导空格的列表无法正常渲染
       { ...gfm(), disable: { null: ['codeIndented'] } },
@@ -119,5 +173,6 @@ export function toMdAst(
     }
   }
   simplify(ast)
+  restoreCurrency(ast)
   return ast
 }
