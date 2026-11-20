@@ -774,7 +774,7 @@ mod tests {
   #[test]
   fn manifest_server_switches_download_url() {
     let base = json!({
-      "version": "1.0.9",
+      "version": "1.1.0",
       "notes": "test",
       "platforms": {
         "windows-x86_64": {
