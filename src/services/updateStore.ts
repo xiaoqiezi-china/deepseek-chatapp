@@ -8,6 +8,9 @@ type UpdateState = {
   version: string
   notes: string
   downloadUrl: string
+  /** Release 中安装包的 minisign 签名原文，桌面端安装时由 Rust 转成 manifest */
+  signature: string
+  publishedAt: string
   /** 本次结果来自哪个源（github / 镜像名），用于排查 */
   source: string
   /** 下载进度，-1 表示不确定 */
@@ -19,6 +22,8 @@ export const useUpdateStore = create<UpdateState>(() => ({
   version: '',
   notes: '',
   downloadUrl: '',
+  signature: '',
+  publishedAt: '',
   source: '',
   percent: -1,
 }))
@@ -38,11 +43,21 @@ export const checkUpdate = async (): Promise<void> => {
         version: result.version,
         notes: result.notes,
         downloadUrl: result.downloadUrl,
+        signature: result.signature,
+        publishedAt: result.publishedAt,
         source: result.source,
         percent: -1,
       })
     } else {
-      useUpdateStore.setState({ status: 'latest', source: result.source, version: '', notes: '' })
+      useUpdateStore.setState({
+        status: 'latest',
+        source: result.source,
+        version: '',
+        notes: '',
+        downloadUrl: '',
+        signature: '',
+        publishedAt: '',
+      })
     }
   } catch {
     useUpdateStore.setState({ status: 'error' })
@@ -51,15 +66,18 @@ export const checkUpdate = async (): Promise<void> => {
 
 /** 下载并安装已发现的更新 */
 export const installUpdateNow = async (): Promise<void> => {
-  const { status, downloadUrl } = useUpdateStore.getState()
+  const { status, version, notes, downloadUrl, signature, publishedAt } = useUpdateStore.getState()
   if (status !== 'available') {
     return
   }
   useUpdateStore.setState({ status: 'downloading', percent: -1 })
   try {
-    await installUpdate(downloadUrl, (percent) => {
-      useUpdateStore.setState({ percent })
-    })
+    await installUpdate(
+      { version, notes, downloadUrl, signature, publishedAt },
+      (percent) => {
+        useUpdateStore.setState({ percent })
+      }
+    )
   } catch {
     useUpdateStore.setState({ status: 'error' })
   }

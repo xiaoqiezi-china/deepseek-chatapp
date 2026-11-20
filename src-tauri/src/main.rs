@@ -439,13 +439,17 @@ fn report_startup(app: tauri::AppHandle, nav_ms: f64) -> Result<(), String> {
 }
 
 
-/// 更新下载源：直连优先（VPN 下最快），失败后依次切换 GitHub 加速镜像。
+/// 更新下载源：镜像优先，直连兜底。GitHub 直连在大陆网络经常被重置，
+/// 先用代理镜像能显著提高首次下载成功率；直连仍保留给能直连 GitHub 的用户。
 const UPDATE_SOURCES: [(&str, &str); 4] = [
-  ("github", ""),
   ("gh-proxy.com", "https://gh-proxy.com/"),
-  ("ghfast.top", "https://ghfast.top/"),
   ("ghproxy.net", "https://ghproxy.net/"),
+  ("github", ""),
+  ("ghfast.top", "https://ghfast.top/"),
 ];
+
+/// Tauri updater 使用的目标平台标识；桌面端只发布 Windows x64。
+const UPDATE_TARGET: &str = "windows-x86_64";
 
 /// 安装进度：attempt 表示当前尝试的源，percent 为 None 时表示总大小未知。
 #[derive(Clone, serde::Serialize)]
@@ -477,50 +481,163 @@ fn log_update(app: &tauri::AppHandle, line: &str) {
   }
 }
 
+/// 在本机临时提供一个 updater manifest。Tauri 的 `Update` 不能从项目代码直接构造，
+/// 但 `UpdaterBuilder::endpoints` 可以在运行时覆盖 endpoint；因此把 Release 信息
+/// 变成一份内存 manifest，再由本地 HTTP 服务提供给 updater 插件。
+/// manifest 只监听 127.0.0.1，安装包本身仍走 https 且由插件校验签名。
+struct ManifestServer {
+  port: u16,
+  stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+  handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl ManifestServer {
+  fn start(base: Value, urls: Vec<String>) -> Result<Self, String> {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+      .map_err(|error| format!("本地更新服务启动失败: {error}"))?;
+    listener
+      .set_nonblocking(true)
+      .map_err(|error| format!("本地更新服务配置失败: {error}"))?;
+    let port = listener
+      .local_addr()
+      .map_err(|error| format!("本地更新服务地址读取失败: {error}"))?
+      .port();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_for_thread = stop.clone();
+
+    let handle = thread::spawn(move || {
+      while !stop_for_thread.load(Ordering::Relaxed) {
+        match listener.accept() {
+          Ok((mut stream, _)) => {
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+            let mut request = [0u8; 1024];
+            let read = stream.read(&mut request).unwrap_or(0);
+            let request_text = String::from_utf8_lossy(&request[..read]);
+            let path = request_text
+              .lines()
+              .next()
+              .and_then(|line| line.split_whitespace().nth(1))
+              .unwrap_or("");
+            let index = path
+              .strip_prefix("/manifest/")
+              .and_then(|value| value.parse::<usize>().ok());
+            let valid = index.map(|value| value < urls.len()).unwrap_or(false);
+            let body = if let Some(index) = index.filter(|value| *value < urls.len()) {
+              let mut manifest = base.clone();
+              manifest["platforms"][UPDATE_TARGET]["url"] =
+                Value::String(urls[index].clone());
+              manifest.to_string()
+            } else {
+              json!({ "error": "not found" }).to_string()
+            };
+            let status = if valid { "200 OK" } else { "404 Not Found" };
+            let response = format!(
+              "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+              body.len(),
+              body
+            );
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+          }
+          Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+            thread::sleep(Duration::from_millis(50));
+          }
+          Err(_) => break,
+        }
+      }
+    });
+
+    Ok(Self {
+      port,
+      stop,
+      handle: Some(handle),
+    })
+  }
+}
+
+impl Drop for ManifestServer {
+  fn drop(&mut self) {
+    use std::sync::atomic::Ordering;
+
+    self.stop.store(true, Ordering::Relaxed);
+    if let Some(handle) = self.handle.take() {
+      let _ = handle.join();
+    }
+  }
+}
+
 /// 下载并安装更新：安装包地址在各镜像间逐个回退，每个源都有独立超时，
 /// 校验失败或连接中断时自动换下一个源，避免单个 GitHub 直链失败就整体失败。
 #[tauri::command]
 async fn install_update(
   app: tauri::AppHandle,
+  version: String,
+  notes: String,
+  download_url: String,
+  signature: String,
+  published_at: String,
   on_progress: Channel<UpdateEvent>,
 ) -> Result<String, String> {
-  let updater = app
-    .updater_builder()
-    .timeout(Duration::from_secs(8))
-    .build()
-    .map_err(|error| format!("更新检查初始化失败: {error}"))?;
-  let Some(mut update) = updater
-    .check()
-    .await
-    .map_err(|error| format!("检查更新失败: {error}"))?
-  else {
-    log_update(&app, "check: already latest");
-    return Err("当前已是最新版本".into());
-  };
-  log_update(
-    &app,
-    &format!("check: {} -> {}", update.current_version, update.version),
-  );
+  let version = version.trim().trim_start_matches('v').to_string();
+  let download_url = download_url.trim().to_string();
+  let signature = signature.trim().to_string();
+  if version.is_empty() {
+    return Err("更新版本号为空".into());
+  }
+  if download_url.is_empty() {
+    return Err("更新下载地址为空".into());
+  }
+  if signature.is_empty() {
+    return Err("更新签名缺失".into());
+  }
 
-  let original = update.download_url.clone();
+  // Tauri 的签名字段要求是 `.sig` 文件的 Base64 内容；Release 里的 `.sig`
+  // 资产本身就是这串 Base64，不需要再次编码。
+  let mut manifest = json!({
+    "version": version,
+    "notes": notes,
+  });
+  let mut platforms = serde_json::Map::new();
+  platforms.insert(
+    UPDATE_TARGET.to_string(),
+    json!({
+      "signature": signature,
+      "url": download_url,
+    }),
+  );
+  manifest["platforms"] = Value::Object(platforms);
+  if !published_at.trim().is_empty() {
+    manifest["pub_date"] = Value::String(published_at);
+  }
+
   let mut candidates: Vec<(String, String)> = Vec::new();
   for (name, prefix) in UPDATE_SOURCES {
     let url = if prefix.is_empty() {
-      original.to_string()
+      download_url.clone()
     } else {
-      format!("{prefix}{original}")
+      format!("{prefix}{download_url}")
     };
     if !candidates.iter().any(|(_, existing)| existing == &url) {
       candidates.push((name.to_string(), url));
     }
   }
+  let urls: Vec<String> = candidates.iter().map(|(_, url)| url.clone()).collect();
+  let server = ManifestServer::start(manifest, urls)?;
 
   let total = candidates.len() as u32;
   let mut last_error = String::new();
-  for (index, (source, url)) in candidates.iter().enumerate() {
-    let target = url
+  for (index, (source, _url)) in candidates.iter().enumerate() {
+    let endpoint = format!("http://127.0.0.1:{}/manifest/{index}", server.port);
+    let endpoint = endpoint
       .parse()
-      .map_err(|error| format!("更新地址无效: {error}"))?;
+      .map_err(|error| format!("本地更新地址无效: {error}"))?;
     let _ = on_progress.send(UpdateEvent::Attempt {
       attempt: index as u32 + 1,
       total,
@@ -530,7 +647,33 @@ async fn install_update(
       &app,
       &format!("attempt {}/{}: {}", index + 1, total, source),
     );
-    update.download_url = target;
+
+    let updater = app
+      .updater_builder()
+      .endpoints(vec![endpoint])
+      .map_err(|error| format!("更新检查初始化失败: {error}"))?
+      .timeout(if source == "github" {
+        Duration::from_secs(30)
+      } else {
+        Duration::from_secs(300)
+      })
+      // 本地 manifest 和镜像下载都不走系统代理，避免代理把 127.0.0.1 也接管。
+      .no_proxy()
+      .build()
+      .map_err(|error| format!("更新检查初始化失败: {error}"))?;
+    let Some(mut update) = updater
+      .check()
+      .await
+      .map_err(|error| format!("检查更新失败: {error}"))?
+    else {
+      log_update(&app, "check: already latest");
+      continue;
+    };
+    log_update(
+      &app,
+      &format!("check: {} -> {}", update.current_version, update.version),
+    );
+
     // 直连在大陆网络常被重置，给较短超时尽快回退到镜像；
     // 镜像本身较慢，留足下载时间。
     update.timeout = Some(if source == "github" {
@@ -567,6 +710,9 @@ async fn install_update(
     }
   }
 
+  if last_error.is_empty() {
+    return Err("当前已是最新版本".into());
+  }
   Err(format!("所有更新源均下载失败（{last_error}）"))
 }
 
@@ -605,4 +751,52 @@ fn main() {
   START.get_or_init(Instant::now);
   boost_startup_priority();
   run();
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::io::{Read, Write};
+  use std::net::TcpStream;
+
+  fn fetch(port: u16, path: &str) -> String {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    write!(
+      stream,
+      "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    )
+    .expect("write");
+    let mut response = String::new();
+    stream.read_to_string(&mut response).expect("read");
+    response
+  }
+
+  #[test]
+  fn manifest_server_switches_download_url() {
+    let base = json!({
+      "version": "1.0.9",
+      "notes": "test",
+      "platforms": {
+        "windows-x86_64": {
+          "signature": "c2ln",
+          "url": "https://github.com/example/app.exe"
+        }
+      }
+    });
+    let urls = vec![
+      "https://gh-proxy.com/https://github.com/example/app.exe".to_string(),
+      "https://github.com/example/app.exe".to_string(),
+    ];
+    let server = ManifestServer::start(base, urls).expect("server");
+
+    let first = fetch(server.port, "/manifest/0");
+    assert!(first.starts_with("HTTP/1.1 200 OK"));
+    assert!(first.contains("https://gh-proxy.com/https://github.com/example/app.exe"));
+
+    let second = fetch(server.port, "/manifest/1");
+    assert!(second.contains("\"url\":\"https://github.com/example/app.exe\""));
+
+    let missing = fetch(server.port, "/manifest/9");
+    assert!(missing.starts_with("HTTP/1.1 404 Not Found"));
+  }
 }

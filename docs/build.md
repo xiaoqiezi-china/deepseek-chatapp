@@ -54,7 +54,7 @@ Gradle 首次构建需要下载发行包（约 219 MB），国内网络可先通
 
 ## 发布桌面端更新
 
-应用启动 5 秒后会静默检查更新，设置 → 通用设置里也有「检查更新」。更新源是 GitHub Releases 的 `latest.json`。
+应用启动 5 秒后会静默检查更新，设置 → 通用设置里也有「检查更新」。更新信息直接读取 GitHub Release API，不再依赖 `latest.json`；API 和资产下载都按镜像优先、直连兜底。
 
 发版流程：
 
@@ -72,7 +72,7 @@ pnpm tauri build
 pnpm release:desktop v0.1.1 "本次更新说明"
 ```
 
-脚本会读取 `src-tauri/target/release/bundle/nsis/` 下的安装包与签名，生成 `latest.json` 并上传到对应的 Release。
+脚本会读取 `src-tauri/target/release/bundle/nsis/` 下的安装包与签名，上传到对应的 Release。桌面端运行时从 Release API 找到以 `x64-setup.exe` 结尾的安装包和同名 `.sig` 签名，校验后安装。
 
 私钥保存在 `~/.tauri/deepseek-ce.key`，**不要提交到仓库**；丢失后已发布的版本将无法接收更新。
 
@@ -83,7 +83,7 @@ Android 端在设置 →「检查更新」里查询 GitHub Releases 最新版本
 
 1. 通过 GitHub API 读取最新 release 的版本和 APK 资产
 2. 与当前安装版本（`versionName`）比较
-3. 有新版本时，调用原生插件 `AppUpdater.downloadAndInstall` 下载 APK 到缓存
+3. 有新版本时，调用原生插件 `AppUpdater.downloadAndInstall` 下载 APK 到缓存；下载会按 `gh-proxy.com`、`ghproxy.net`、GitHub 直连等地址依次重试
 4. 用 FileProvider 拉起系统安装器，用户确认后完成安装
 
 系统要求每次安装必须由用户确认，无法静默升级。发布 Android 版本时需同时上传 APK 到 Release，文件名以 `.apk` 结尾。
