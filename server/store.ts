@@ -18,6 +18,7 @@ type Summary = {
   title: string
   createdAt: number
   updatedAt: number
+  pinned?: boolean
   fileIds: string[]
 }
 
@@ -84,6 +85,7 @@ async function rebuildSummaries(dir = SESSIONS_DIR): Promise<Summary[]> {
       title: session.title ?? '',
       createdAt: session.createdAt ?? 0,
       updatedAt: session.updatedAt ?? 0,
+      pinned: session.pinned === true,
       fileIds,
     })
   }
@@ -139,7 +141,13 @@ export async function saveSettings(settings: Record<string, unknown>): Promise<v
 // ---- 会话 ----
 export async function loadSessionSummaries() {
   const summaries = await readSummaries()
-  return summaries.map((s) => ({ id: s.id, title: s.title, createdAt: s.createdAt, updatedAt: s.updatedAt }))
+  return summaries.map((s) => ({
+    id: s.id,
+    title: s.title,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+    pinned: s.pinned === true,
+  }))
 }
 
 export async function loadSession(id: string) {
@@ -160,6 +168,7 @@ export async function saveSession(session: any, files: { id: string; blob: Buffe
     title: session.title ?? '',
     createdAt: session.createdAt ?? 0,
     updatedAt: session.updatedAt ?? 0,
+    pinned: session.pinned === true,
     fileIds: fileIdsOf(session),
   }
   const index = summaries.findIndex((s) => s.id === id)

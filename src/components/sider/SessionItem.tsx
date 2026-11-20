@@ -6,9 +6,10 @@ import {
   IconEditOutline16,
   IconEllipsisOutline16,
   IconMultiSelectOutline16,
+  IconPinOutline16,
   IconTrashOutline16,
 } from '../base/icons.js'
-import { renameSession, selectSession } from '../../services/chat/store.js'
+import { renameSession, selectSession, setSessionPinned } from '../../services/chat/store.js'
 import type { SessionSummary } from '../../services/chat/types.js'
 import { IconButton } from '../base/IconButton.js'
 import { Menu } from '../base/Menu.js'
@@ -184,6 +185,12 @@ export const SessionItem = memo(function SessionItem({
               }
             }}
             options={[
+              {
+                key: 'pin',
+                label: session.pinned ? t('sessionItemMenuUnpin') : t('sessionItemMenuPin'),
+                icon: <IconPinOutline16 />,
+                onSelect: () => setSessionPinned(session.id, !session.pinned),
+              },
               {
                 key: 'select',
                 label: t('sessionItemMenuSelect'),

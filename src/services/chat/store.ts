@@ -87,7 +87,10 @@ export const useChatStore = create<ChatState>(() => ({
 const { getState: get, setState: set } = useChatStore
 
 const sortSessions = (sessions: SessionSummary[]) =>
-  [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
+  [...sessions].sort(
+    (a, b) =>
+      Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.updatedAt - a.updatedAt
+  )
 
 const getSession = (id: string) => {
   const cache = get().sessionCache
@@ -100,7 +103,10 @@ const getStreamController = (id: string) => {
 }
 
 const sameSummary = (a: SessionSummary, b: SessionSummary) =>
-  a.title === b.title && a.createdAt === b.createdAt && a.updatedAt === b.updatedAt
+  a.title === b.title &&
+  a.createdAt === b.createdAt &&
+  a.updatedAt === b.updatedAt &&
+  Boolean(a.pinned) === Boolean(b.pinned)
 
 const sessionAccess = new Map<string, number>()
 const unsavedSessions = new Set<string>()
@@ -541,6 +547,32 @@ export const renameSession = (id: string, title: string) => {
   }
 }
 
+/** 置顶只改列表元数据，不改变 updatedAt；未加载的会话先读取完整数据再写回。 */
+export const setSessionPinned = (id: string, pinned: boolean) => {
+  if (get().importingHistory || deletingSessions.has(id)) {
+    return
+  }
+  const apply = (session: Session) => ({ ...session, pinned })
+  if (getSession(id)) {
+    updateSession(id, apply)
+    persist(id)
+    return
+  }
+  set((state) => ({
+    sessions: sortSessions(
+      state.sessions.map((session) => (session.id === id ? { ...session, pinned } : session))
+    ),
+  }))
+  void ensureSessionLoaded(id)
+    .then(() => {
+      if (!deletingSessions.has(id) && getSession(id)) {
+        updateSession(id, apply)
+        persist(id)
+      }
+    })
+    .catch(db.reportStorageError('pin session'))
+}
+
 /**
  * 删除会话；本地原件仅在没有其他会话引用时清理。远端文件不删：导入、编辑、重新生成都会复用同一个附件，
  * 同一服务端文件可能被多个会话引用，不维护引用计数。
@@ -641,7 +673,7 @@ export const sendMessage = (targetSessionId: string | null) => {
     sessionId = session.id
     touchSession(session.id)
     set((state) => ({
-      sessions: [toSessionSummary(session), ...state.sessions],
+      sessions: sortSessions([toSessionSummary(session), ...state.sessions]),
       sessionCache: { ...state.sessionCache, [session.id]: session },
       activeId: session.id,
     }))
@@ -1109,7 +1141,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             model: initial.model ?? useSettings.getState().model,
             ...(systemPrompt ? { system: systemPrompt } : {}),
             messages,
-            thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
+            thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
             tools: serverTools(initial.search ?? false),
             ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
           },

@@ -25,6 +25,32 @@ declare module 'mdast' {
 
 const text = (value: string): Text => ({ type: 'text', value })
 
+const BOLD = /(?<!\\)\*\*([^\n]+?)(?<!\\)\*\*/g
+
+/**
+ * CommonMark 的闭合 ** 紧跟在“。”等标点后、又直接接中文时，会被判定为左边界，
+ * 导致整段保留星号。把解析器未能识别的 **...** 兜底换成 strong。
+ */
+const splitBold = (value: string): Nodes[] | null => {
+  const nodes: Nodes[] = []
+  let last = 0
+  for (const match of value.matchAll(BOLD)) {
+    const index = match.index ?? 0
+    if (index > last) {
+      nodes.push(text(value.slice(last, index)))
+    }
+    nodes.push({ type: 'strong', children: [text(match[1])] })
+    last = index + match[0].length
+  }
+  if (nodes.length === 0) {
+    return null
+  }
+  if (last < value.length) {
+    nodes.push(text(value.slice(last)))
+  }
+  return nodes
+}
+
 /**
  * 解析正文，并把渲染器不单独处理的节点提前换掉，渲染时无需再读原文：
  * - 传入 sources 时，[citation:N] 换成角标节点，找不到来源的直接去掉
@@ -60,6 +86,16 @@ export function toMdAst(
   const raw = (node: Nodes) => input.slice(node.position?.start.offset, node.position?.end.offset)
   // 先处理子节点，再按需把当前节点换成若干节点
   const simplify = (node: Nodes): Nodes[] => {
+    if (node.type === 'text') {
+      // 跳过被转义的星号，避免把 \*\*...\*\* 当成加粗
+      if (!(node.position && raw(node).includes('\\*'))) {
+        const parts = splitBold(node.value)
+        if (parts) {
+          return parts
+        }
+      }
+      return [node]
+    }
     if ('children' in node) {
       ;(node as Parent).children = node.children.flatMap(simplify) as RootContent[]
     }

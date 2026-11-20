@@ -97,7 +97,12 @@ export const UserMessage = memo(function UserMessage({
               }
               if (event.key === 'Escape') {
                 setEditing(false)
-              } else if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !isMobile) {
+              } else if (
+                !isMobile &&
+                event.key === 'Enter' &&
+                event.shiftKey &&
+                !event.ctrlKey
+              ) {
                 event.preventDefault()
                 sendEdit()
               }

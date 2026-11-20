@@ -62,6 +62,7 @@ fn summary_of(s: &Value) -> Value {
     "title": s.get("title").cloned().unwrap_or(json!("")),
     "createdAt": s.get("createdAt").cloned().unwrap_or(json!(0)),
     "updatedAt": s.get("updatedAt").cloned().unwrap_or(json!(0)),
+    "pinned": s.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false),
     "fileIds": file_ids(s),
   })
 }
@@ -114,7 +115,8 @@ fn storage_request(app: tauri::AppHandle, method: String, path: String, body: Op
   if path == "/sessions" && method == "GET" {
     let summaries = read_summaries(&dir);
     let public: Vec<Value> = summaries.iter().map(|s| json!({
-      "id": s.get("id"), "title": s.get("title"), "createdAt": s.get("createdAt"), "updatedAt": s.get("updatedAt")
+      "id": s.get("id"), "title": s.get("title"), "createdAt": s.get("createdAt"), "updatedAt": s.get("updatedAt"),
+      "pinned": s.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false)
     })).collect();
     return Ok(resp(200, Value::Array(public)));
   }
@@ -240,7 +242,8 @@ fn storage_request(app: tauri::AppHandle, method: String, path: String, body: Op
     let _ = fs::create_dir_all(&files_staged);
     let summaries = rebuild_summaries(&dir);
     let public: Vec<Value> = summaries.iter().map(|s| json!({
-      "id": s.get("id"), "title": s.get("title"), "createdAt": s.get("createdAt"), "updatedAt": s.get("updatedAt")
+      "id": s.get("id"), "title": s.get("title"), "createdAt": s.get("createdAt"), "updatedAt": s.get("updatedAt"),
+      "pinned": s.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false)
     })).collect();
     return Ok(resp(200, Value::Array(public)));
   }

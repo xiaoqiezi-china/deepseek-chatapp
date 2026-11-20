@@ -202,6 +202,18 @@ export const IconNewChatOutline20 = () => (
   </svg>
 )
 
+export const IconPinOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.56a1 1 0 0 1-1.25-.95V9.5c0-.81.4-1.52 1-1.99V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v3.51c.6.47 1 1.18 1 1.99v2.17a1 1 0 0 1-1.25.95l-1.78-.56A2 2 0 0 1 9 10.76Z"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 export const IconPanelLeftOutline16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

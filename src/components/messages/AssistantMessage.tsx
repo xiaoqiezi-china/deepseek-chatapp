@@ -122,7 +122,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               if (event.nativeEvent.isComposing) { return }
               if (event.key === 'Escape') {
                 cancelEdit()
-              } else if (event.key === 'Enter' && !event.shiftKey && !isMobile) {
+              } else if (!isMobile && event.key === 'Enter' && event.shiftKey) {
                 event.preventDefault()
                 saveEdit()
               }
