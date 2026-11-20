@@ -52,7 +52,7 @@ export const en = {
   runDuration: 'Duration {ms} ms',
   runNoOutput: '(no output)',
   runTruncated: 'Output is too long and has been truncated.',
-  pythonNotFound: 'Python was not found. Install Python and add it to PATH.',
+  pythonNotFound: 'No usable Python runtime was found. Check that your Python installation is complete or reinstall it.',
   nodeNotFound: 'Node.js was not found. Install Node.js and add it to PATH.',
   cmdNotSupported: 'cmd is not supported on this platform.',
   send: 'Send',

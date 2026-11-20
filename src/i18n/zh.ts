@@ -46,7 +46,7 @@ export const zh = {
   runDuration: '用时 {ms} ms',
   runNoOutput: '（无输出）',
   runTruncated: '输出过长，已截断',
-  pythonNotFound: '未检测到 Python 环境，请先安装 Python 并加入 PATH',
+  pythonNotFound: '未检测到可用的 Python 环境，请检查安装是否完整或重新安装 Python',
   nodeNotFound: '未检测到 Node.js 环境，请先安装 Node.js 并加入 PATH',
   cmdNotSupported: '当前平台不支持 cmd 运行',
   send: '发送',

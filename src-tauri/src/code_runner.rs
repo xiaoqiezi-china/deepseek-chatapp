@@ -83,27 +83,75 @@ fn node_version(text: &str) -> Option<String> {
   }
 }
 
+fn parse_python_paths(text: &str) -> Vec<String> {
+  text
+    .lines()
+    .filter_map(|line| {
+      let colon = line.find(":\\")?;
+      let start = colon.saturating_sub(1);
+      let path = line[start..].trim();
+      if path.is_empty() {
+        None
+      } else {
+        Some(path.to_string())
+      }
+    })
+    .collect()
+}
+
+fn python_candidates() -> Vec<(String, Vec<String>)> {
+  let mut candidates: Vec<(String, Vec<String>)> = Vec::new();
+  if cfg!(windows) {
+    // py 启动器知道安装位置，包括不在 PATH 里的 Python；优先使用它列出的路径。
+    for flag in ["-0p", "--list-paths"] {
+      if let Some(text) = command_text("py", &[flag]) {
+        for path in parse_python_paths(&text) {
+          candidates.push((path, Vec::new()));
+        }
+        if !candidates.is_empty() {
+          break;
+        }
+      }
+    }
+
+    if candidates.is_empty() {
+      let roots = [
+        std::env::var_os("LOCALAPPDATA")
+          .map(|value| PathBuf::from(value).join("Programs").join("Python")),
+        Some(PathBuf::from("C:\\")),
+      ];
+      for root in roots.into_iter().flatten() {
+        if let Ok(entries) = fs::read_dir(root) {
+          for entry in entries.flatten() {
+            let path = entry.path().join("python.exe");
+            if path.is_file() {
+              candidates.push((path.to_string_lossy().into_owned(), Vec::new()));
+            }
+          }
+        }
+      }
+    }
+
+    candidates.push(("py".to_string(), vec!["-3".to_string()]));
+  }
+  candidates.push(("python".to_string(), Vec::new()));
+  candidates.push(("python3".to_string(), Vec::new()));
+  candidates
+}
+
 fn detect_runtime(language: &str) -> RuntimeInfo {
   if language == "python" {
-    let candidates: Vec<(&str, Vec<&str>)> = if cfg!(windows) {
-      vec![
-        ("py", vec!["-3"]),
-        ("python", vec![]),
-        ("python3", vec![]),
-      ]
-    } else {
-      vec![("python3", vec![]), ("python", vec![])]
-    };
-    for (command, args) in candidates {
+    for (command, args) in python_candidates() {
       let mut version_args = args.clone();
-      version_args.push("--version");
-      if let Some(text) = command_text(command, &version_args) {
+      version_args.push("--version".to_string());
+      let version_args: Vec<&str> = version_args.iter().map(String::as_str).collect();
+      if let Some(text) = command_text(&command, &version_args) {
         if let Some(version) = python_version(&text) {
           return RuntimeInfo {
             available: true,
             version: Some(version),
-            command: Some(command.to_string()),
-            args: args.iter().map(|arg| arg.to_string()).collect(),
+            command: Some(command),
+            args,
             error: None,
           };
         }

@@ -55,20 +55,48 @@ const runTextCommand = (command: string, args: string[], timeout = 5_000) =>
     child.on('close', (code) => finish(`${stdout}\n${stderr}`, code === 0))
   })
 
-const pythonCandidates = () =>
-  isWindows
-    ? [
-        { command: 'py', args: ['-3'] },
-        { command: 'python', args: [] },
-        { command: 'python3', args: [] },
-      ]
-    : [
-        { command: 'python3', args: [] },
-        { command: 'python', args: [] },
-      ]
+const parsePythonPaths = (text: string): string[] =>
+  text
+    .split(/\r?\n/)
+    .map((line) => {
+      const colon = line.indexOf(':\\')
+      return colon > 0 ? line.slice(colon - 1).trim() : ''
+    })
+    .filter(Boolean)
+
+const pythonCandidates = async (): Promise<Array<{ command: string; args: string[] }>> => {
+  if (!isWindows) {
+    return [
+      { command: 'python3', args: [] },
+      { command: 'python', args: [] },
+    ]
+  }
+
+  const candidates: Array<{ command: string; args: string[] }> = []
+  // py 启动器知道不在 PATH 里的 Python 安装位置；直接路径避免 WindowsApps alias 问题。
+  for (const flag of ['-0p', '--list-paths']) {
+    const result = await runTextCommand('py', [flag])
+    if (!result.ok) {
+      continue
+    }
+    for (const path of parsePythonPaths(result.text)) {
+      candidates.push({ command: path, args: [] })
+    }
+    if (candidates.length > 0) {
+      break
+    }
+  }
+
+  candidates.push(
+    { command: 'py', args: ['-3'] },
+    { command: 'python', args: [] },
+    { command: 'python3', args: [] }
+  )
+  return candidates
+}
 
 const detectPython = async (): Promise<RuntimeInfo> => {
-  for (const candidate of pythonCandidates()) {
+  for (const candidate of await pythonCandidates()) {
     const result = await runTextCommand(candidate.command, [...candidate.args, '--version'])
     const version = result.text.match(/Python\s+(\d+(?:\.\d+)*)/i)?.[1]
     if (result.ok && version) {
