@@ -10,6 +10,8 @@ use tauri::ipc::Channel;
 use tauri::Manager;
 use tauri_plugin_updater::UpdaterExt;
 
+mod code_runner;
+
 /// 进程启动时刻，用于测量到首帧的耗时。
 static START: OnceLock<Instant> = OnceLock::new();
 
@@ -741,7 +743,9 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       storage_request,
       report_startup,
-      install_update
+      install_update,
+      code_runner::check_runtime,
+      code_runner::run_code
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
@@ -774,7 +778,7 @@ mod tests {
   #[test]
   fn manifest_server_switches_download_url() {
     let base = json!({
-      "version": "1.1.0",
+      "version": "1.1.1",
       "notes": "test",
       "platforms": {
         "windows-x86_64": {

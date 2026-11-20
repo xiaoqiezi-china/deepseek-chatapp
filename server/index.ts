@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as store from './store.js'
+import { checkRuntime, runCode, type RunLanguage } from './codeRunner.js'
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const DIST_DIR = path.join(root, 'dist')
@@ -62,6 +63,9 @@ const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Headers': 'Content-Type',
 }
 
+const isRunLanguage = (value: unknown): value is RunLanguage =>
+  value === 'python' || value === 'js' || value === 'cmd'
+
 async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
   let rel = decodeURIComponent(url.pathname)
   if (rel === '/' || !path.extname(rel)) rel = '/index.html'
@@ -97,6 +101,20 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     if (p === '/settings') {
       if (method === 'GET') return sendJson(res, 200, (await store.loadSettings()) ?? {})
       if (method === 'PUT') { await store.saveSettings(await readJsonBody(req)); return sendJson(res, 200, { ok: true }) }
+    }
+
+    // Code execution: web UI delegates to the local Node process.
+    if (p === '/runtime' && method === 'GET') {
+      const language = url.searchParams.get('language')
+      if (!isRunLanguage(language)) return sendJson(res, 400, { error: 'Invalid language' })
+      return sendJson(res, 200, await checkRuntime(language))
+    }
+    if (p === '/run-code' && method === 'POST') {
+      const body = await readJsonBody(req)
+      if (!isRunLanguage(body?.language) || typeof body.code !== 'string') {
+        return sendJson(res, 400, { error: 'Invalid run request' })
+      }
+      return sendJson(res, 200, await runCode(body.language, body.code))
     }
 
     // Sessions
