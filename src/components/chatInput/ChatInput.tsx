@@ -184,11 +184,11 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             }
           }}
           onKeyDown={(event) => {
-            // 回车默认换行；桌面端 Shift+Enter 发送，移动端只通过发送按钮提交。
+            // 桌面端 Enter 发送、Shift+Enter 换行；移动端只通过发送按钮提交。
             if (
               !isMobile &&
               event.key === 'Enter' &&
-              event.shiftKey &&
+              !event.shiftKey &&
               !event.nativeEvent.isComposing
             ) {
               event.preventDefault()

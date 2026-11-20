@@ -100,7 +100,7 @@ export const UserMessage = memo(function UserMessage({
               } else if (
                 !isMobile &&
                 event.key === 'Enter' &&
-                event.shiftKey &&
+                !event.shiftKey &&
                 !event.ctrlKey
               ) {
                 event.preventDefault()
