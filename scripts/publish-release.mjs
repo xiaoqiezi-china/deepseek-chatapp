@@ -12,6 +12,7 @@
  *   2. 环境变量 GITHUB_TOKEN，或本机 git credential 中已保存 GitHub 凭据
  */
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { promisify } from 'node:util'
 
@@ -21,7 +22,7 @@ const REPO = 'deepseek-chatapp'
 const BUNDLE = 'src-tauri/target/release/bundle/nsis'
 
 const tag = process.argv[2]
-const notes = process.argv[3] ?? ''
+const notes = process.argv[3] ?? process.env.RELEASE_NOTES ?? ''
 if (!tag) {
   console.error('缺少 tag 参数，例如：node scripts/publish-release.mjs v0.1.1 "说明"')
   process.exit(1)
@@ -105,4 +106,14 @@ const upload = async (filePath, name) => {
 
 console.log('上传安装包:', await upload(`${BUNDLE}/${exeName}`, assetName))
 console.log('上传签名:', await upload(`${BUNDLE}/${sigName}`, assetName + '.sig'))
+
+for (const extra of [
+  { path: `Deepseek-CE-${version}.apk`, name: `Deepseek-CE-${version}.apk` },
+  { path: 'latest.json', name: 'latest.json' },
+]) {
+  if (existsSync(extra.path)) {
+    console.log(`上传 ${extra.name}:`, await upload(extra.path, extra.name))
+  }
+}
+
 console.log('\n完成：', `https://github.com/${OWNER}/${REPO}/releases/tag/${tag}`)
