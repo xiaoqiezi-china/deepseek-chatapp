@@ -49,11 +49,14 @@ async function getToken() {
 
 const token = await getToken()
 
+const version = tag.replace(/^v/, '')
 const assets = (await readdir(BUNDLE)).filter((name) => name.endsWith('.exe') || name.endsWith('.sig'))
-const exeName = assets.find((name) => name.endsWith('.exe'))
-const sigName = exeName + '.sig'
+const exeName = assets.find(
+  (name) => name.endsWith('.exe') && name.includes(`_${version}_x64-setup.exe`)
+)
+const sigName = exeName ? exeName + '.sig' : ''
 if (!exeName || !assets.includes(sigName)) {
-  throw new Error('未找到安装包或其签名，请先执行 tauri build')
+  throw new Error(`未找到 ${version} 的安装包或其签名，请先执行 tauri build`)
 }
 const assetName = exeName.replace(/ /g, '-')
 
