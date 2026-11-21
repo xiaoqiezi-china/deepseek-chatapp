@@ -4,7 +4,7 @@ import { ApiError, streamMessage } from '../api/client.js'
 import type { CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, checkImageFileIds, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
-import { useSettings } from '../settings.js'
+import { currentModelId, currentSystemPrompt, isThirdPartyModel, useSettings } from '../settings.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
 import {
@@ -15,7 +15,7 @@ import {
   prepareDraftMessage,
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
-import { currentSystemPrompt } from '../settings.js'
+import { streamThirdPartyReply } from './thirdPartyReply.js'
 import {
   applyEvent,
   canContinueReply,
@@ -326,7 +326,7 @@ const createReply = (): AssistantMessage => {
     id: createId(),
     role: 'assistant',
     createdAt: Date.now(),
-    model: useSettings.getState().model,
+    model: currentModelId(),
     thinking,
     search,
     prefix: true,
@@ -848,8 +848,8 @@ export const continueReply = (sessionId: string, messageId: string) => {
   const { thinking, search } = useSettings.getState()
   const reply: AssistantMessage = {
     ...previous,
-    // 未记录请求配置的回复，续写时使用默认模型和当前开关。
-    model: previous.model ?? useSettings.getState().model,
+    // 未记录请求配置的回复，续写时使用当前模型来源和开关。
+    model: previous.model ?? currentModelId(),
     thinking: previous.thinking ?? thinking,
     search: previous.search ?? search,
     status: 'pending',
@@ -1117,6 +1117,7 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
  */
 const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
   const controller = new AbortController()
+  const thirdParty = isThirdPartyModel()
   if (!getSession(sessionId)?.title) {
     titleRequests.add(controller)
   }
@@ -1136,16 +1137,49 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       let preparing = true
       let receivedContent = false
       try {
-        const prepared = await prepareFiles(sessionId, request, controller.signal)
+        // 第三方模型只接收文本，不把 DeepSeek Files API 的 file_id 发过去，也省掉附件补传。
+        const prepared = thirdParty ? request : await prepareFiles(sessionId, request, controller.signal)
         preparing = false
         // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
-        const latestReminder = prepared.prefix
-          ? prepared.prefix.latestReminder
-          : createLatestReminder(useSettings.getState())
+        const latestReminder =
+          (prepared.prefix
+            ? prepared.prefix.latestReminder
+            : createLatestReminder(useSettings.getState())) ?? ''
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
         persist(sessionId)
         const systemPrompt = currentSystemPrompt()
+
+        if (thirdParty) {
+          const settings = useSettings.getState()
+          reply = await streamThirdPartyReply({
+            reply,
+            history: prepared.history,
+            question: prepared.question,
+            prefix: prepared.prefix,
+            search: initial.search ?? false,
+            latestReminder,
+            systemPrompt,
+            config: {
+              url: settings.thirdPartyApiUrl,
+              model: settings.thirdPartyModel,
+              apiKey: settings.thirdPartyApiKey,
+              searchApiKey: (settings.apiKey ?? '').trim(),
+            },
+            signal: controller.signal,
+            onUpdate: (next) => {
+              reply = next
+              if (document.visibilityState === 'hidden') {
+                flush()
+              } else {
+                frame ||= requestAnimationFrame(flush)
+              }
+            },
+          })
+          reply = settleReply(reply, 'done', Date.now())
+          break
+        }
+
         const messages = toRequestMessages(
           prepared.history,
           prepared.question,
@@ -1156,7 +1190,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         const events = streamMessage(
           useSettings.getState().apiKey ?? '',
           {
-            model: initial.model ?? useSettings.getState().model,
+            model: 'deepseek-flash',
             ...(systemPrompt ? { system: systemPrompt } : {}),
             messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
@@ -1205,6 +1239,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         }
         // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
         if (
+          !thirdParty &&
           attempt < FILE_RETRY_LIMIT &&
           !receivedContent &&
           reuploadInvalidatedFiles(sessionId, request, error)

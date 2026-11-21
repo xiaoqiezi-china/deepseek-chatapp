@@ -57,6 +57,107 @@ const readBinaryBody = async (req: http.IncomingMessage): Promise<Buffer> => {
   return Buffer.concat(chunks)
 }
 
+const isHttpUrl = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 第三方 Chat Completions 代理：浏览器只访问同源 /api，本机服务负责转发并原样串流 SSE。
+ * 这样第三方服务只需要允许本机 Node 访问，不再受浏览器 CORS 限制。
+ */
+async function proxyThirdParty(req: http.IncomingMessage, res: http.ServerResponse) {
+  // 只接受应用自身发起的同站请求，避免浏览器里的第三方网页把本机服务当成开放代理。
+  if (req.headers['sec-fetch-site'] === 'cross-site') {
+    sendJson(res, 403, { error: { message: 'Cross-site proxy request rejected' } })
+    return
+  }
+  const body = (await readJsonBody(req)) as {
+    url?: unknown
+    apiKey?: unknown
+    payload?: unknown
+  }
+  if (!isHttpUrl(body.url) || typeof body.apiKey !== 'string' || body.payload == null) {
+    sendJson(res, 400, { error: { message: 'Invalid third-party proxy request' } })
+    return
+  }
+
+  const controller = new AbortController()
+  const onClose = () => {
+    if (!res.writableEnded) controller.abort()
+  }
+  res.on('close', onClose)
+
+  try {
+    const upstream = await fetch(body.url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${body.apiKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(body.payload),
+      signal: controller.signal,
+    })
+    res.statusCode = upstream.status
+    res.setHeader('X-DSH-Third-Party-Proxy', '1')
+    const contentType = upstream.headers.get('content-type')
+    if (contentType) res.setHeader('Content-Type', contentType)
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders()
+
+    if (!upstream.body) {
+      res.end(await upstream.text())
+      return
+    }
+
+    const reader = upstream.body.getReader()
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (res.destroyed) {
+          await reader.cancel().catch(() => undefined)
+          break
+        }
+        if (!res.write(Buffer.from(value))) {
+          // 客户端断开时也要唤醒等待中的背压，否则代理线程会一直挂住。
+          await new Promise<void>((resolve) => {
+            const onReady = () => {
+              res.off('drain', onReady)
+              res.off('close', onReady)
+              resolve()
+            }
+            res.once('drain', onReady)
+            res.once('close', onReady)
+          })
+        }
+      }
+      res.end()
+    } finally {
+      reader.releaseLock()
+    }
+  } catch (error) {
+    if (!res.headersSent) {
+      sendJson(res, 502, {
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+        },
+      })
+    } else if (!res.destroyed) {
+      res.destroy()
+    }
+  } finally {
+    res.off('close', onClose)
+  }
+}
+
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,PUT,PATCH,POST,DELETE,OPTIONS',
@@ -101,6 +202,12 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     if (p === '/settings') {
       if (method === 'GET') return sendJson(res, 200, (await store.loadSettings()) ?? {})
       if (method === 'PUT') { await store.saveSettings(await readJsonBody(req)); return sendJson(res, 200, { ok: true }) }
+    }
+
+    // Third-party Chat Completions proxy: keep the API key out of browser CORS preflights.
+    if (p === '/third-party-proxy' && method === 'POST') {
+      await proxyThirdParty(req, res)
+      return
     }
 
     // Code execution: web UI delegates to the local Node process.

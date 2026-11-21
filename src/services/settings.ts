@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import type { ChatModel } from './api/types.js'
 import { storageFetch } from './storage/bridge.js'
 import type { TtsVoice } from './api/speech.js'
 import { normalizeLocation, type UserLocation } from './location.js'
@@ -11,6 +10,9 @@ export type ThemePreference = 'light' | 'dark' | 'system'
 
 /** 系统提示词模式：默认（官方身份）/ 自定义（内容为空即不发送 system） */
 export type SystemPromptMode = 'default' | 'custom'
+
+/** 模型来源：DeepSeek 官方固定使用 deepseek-flash，或自定义 Chat Completions 服务。 */
+export type ModelSource = 'deepseek' | 'third-party'
 
 /** 默认系统提示词：实际随请求发送；设置界面只展示社区版标识文案，不展示原文。 */
 export const DEFAULT_SYSTEM_PROMPT = [
@@ -30,8 +32,14 @@ type Settings = {
   siderCollapsed: boolean
   systemPromptMode: SystemPromptMode
   systemPrompt: string
-  /** 当前使用的聊天模型，默认 deepseek-flash */
-  model: ChatModel
+  /** 模型来源；DeepSeek 固定 deepseek-flash，第三方走 Chat Completions API。 */
+  modelSource: ModelSource
+  /** 第三方 Chat Completions 地址，可填写 base URL 或完整 /chat/completions 地址。 */
+  thirdPartyApiUrl: string
+  /** 第三方模型 ID。 */
+  thirdPartyModel: string
+  /** 第三方 API Key；联网搜索和 TTS 仍使用 apiKey。 */
+  thirdPartyApiKey: string
 }
 
 /** 默认值：首次启动或在后端不可达时使用。 */
@@ -46,7 +54,10 @@ const defaults: Settings = {
   siderCollapsed: false,
   systemPromptMode: 'default',
   systemPrompt: '',
-  model: 'deepseek-flash',
+  modelSource: 'deepseek',
+  thirdPartyApiUrl: '',
+  thirdPartyModel: '',
+  thirdPartyApiKey: '',
 }
 
 /** 位置选择模式跟随浏览器语言，与应用内选择的界面语言无关。 */
@@ -77,7 +88,10 @@ const sanitize = (raw: Record<string, unknown> | null): Settings => {
     siderCollapsed: raw.siderCollapsed === true,
     systemPromptMode: raw.systemPromptMode === 'custom' ? 'custom' : 'default',
     systemPrompt: typeof raw.systemPrompt === 'string' ? raw.systemPrompt : '',
-    model: raw.model === 'deepseek-v4-pro' ? 'deepseek-v4-pro' : 'deepseek-flash',
+    modelSource: raw.modelSource === 'third-party' ? 'third-party' : 'deepseek',
+    thirdPartyApiUrl: typeof raw.thirdPartyApiUrl === 'string' ? raw.thirdPartyApiUrl : '',
+    thirdPartyModel: typeof raw.thirdPartyModel === 'string' ? raw.thirdPartyModel : '',
+    thirdPartyApiKey: typeof raw.thirdPartyApiKey === 'string' ? raw.thirdPartyApiKey : '',
   }
 }
 
@@ -171,7 +185,31 @@ export const setSystemPrompt = (systemPrompt: string) => {
   persist()
 }
 
-export const setModel = (model: ChatModel) => {
-  useSettings.setState({ model })
+export const setModelSource = (modelSource: ModelSource) => {
+  useSettings.setState({ modelSource })
   persist()
 }
+
+export const setThirdPartyApiUrl = (thirdPartyApiUrl: string) => {
+  useSettings.setState({ thirdPartyApiUrl })
+  persist()
+}
+
+export const setThirdPartyModel = (thirdPartyModel: string) => {
+  useSettings.setState({ thirdPartyModel })
+  persist()
+}
+
+export const setThirdPartyApiKey = (thirdPartyApiKey: string) => {
+  useSettings.setState({ thirdPartyApiKey })
+  persist()
+}
+
+/** 当前请求使用的模型 ID；第三方未填写时为空。 */
+export const currentModelId = (): string => {
+  const { modelSource, thirdPartyModel } = useSettings.getState()
+  return modelSource === 'third-party' ? thirdPartyModel.trim() : 'deepseek-flash'
+}
+
+export const isThirdPartyModel = (): boolean =>
+  useSettings.getState().modelSource === 'third-party'

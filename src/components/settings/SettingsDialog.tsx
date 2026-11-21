@@ -21,6 +21,10 @@ import {
   isChineseBrowser,
   setLocale,
   setLocation,
+  setModelSource,
+  setThirdPartyApiKey,
+  setThirdPartyApiUrl,
+  setThirdPartyModel,
   setThemePreference,
   setTtsVoice,
   type ThemePreference,
@@ -38,7 +42,6 @@ import { IconAccountOutline16 } from '../base/icons.js'
 import { openAccountDialog } from '../account/accountState.js'
 import {  setSystemPrompt,
   setSystemPromptMode,
-  setModel,
   useSettings,
 } from '../../services/settings.js'
 import { Modal } from '../base/Modal.js'
@@ -703,29 +706,81 @@ const AccountSetting = () => {
 }
 
 
-/** 聊天模型选择：默认 deepseek-flash，可切换 deepseek-v4-pro。 */
+/** 模型来源：DeepSeek 固定 deepseek-flash；选择其他时配置第三方 Chat Completions。 */
 const ModelSetting = () => {
   const t = useTranslate()
-  const model = useSettings((state) => state.model)
+  const modelSource = useSettings((state) => state.modelSource)
+  const apiUrl = useSettings((state) => state.thirdPartyApiUrl)
+  const model = useSettings((state) => state.thirdPartyModel)
+  const apiKey = useSettings((state) => state.thirdPartyApiKey)
   return (
-    <SettingCell
-      label={t('settingsModel')}
-      status={null}
-      action={
-        <Select
-          ariaLabel={t('settingsModel')}
-          value={model}
-          options={[
-            { value: 'deepseek-flash', label: 'deepseek-flash' },
-            { value: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
-          ]}
-          onChange={(next) => setModel(next === 'deepseek-v4-pro' ? 'deepseek-v4-pro' : 'deepseek-flash')}
+    <>
+      <SettingCell
+        label={t('settingsModelSource')}
+        status={null}
+        action={
+          <Select
+            ariaLabel={t('settingsModelSource')}
+            value={modelSource}
+            options={[
+              { value: 'deepseek', label: t('settingsModelSourceDeepseek') },
+              { value: 'third-party', label: t('settingsModelSourceThirdParty') },
+            ]}
+            onChange={(next) =>
+              setModelSource(next === 'third-party' ? 'third-party' : 'deepseek')
+            }
+          />
+        }
+      />
+      {modelSource === 'deepseek' ? (
+        <SettingCell
+          label={t('settingsModelFixed')}
+          status={null}
+          action={<span className={styles.fixedValue}>deepseek-flash</span>}
         />
-      }
-    />
+      ) : (
+        <div className={styles.thirdParty}>
+          <div className={styles.thirdPartyTitle}>{t('settingsThirdPartyAdvanced')}</div>
+          <label className={styles.thirdPartyField}>
+            <span className={styles.thirdPartyLabel}>{t('settingsThirdPartyApiUrl')}</span>
+            <input
+              className={styles.thirdPartyInput}
+              value={apiUrl}
+              placeholder={t('settingsThirdPartyApiUrlPlaceholder')}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setThirdPartyApiUrl(event.target.value)}
+            />
+          </label>
+          <label className={styles.thirdPartyField}>
+            <span className={styles.thirdPartyLabel}>{t('settingsThirdPartyModelId')}</span>
+            <input
+              className={styles.thirdPartyInput}
+              value={model}
+              placeholder={t('settingsThirdPartyModelIdPlaceholder')}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setThirdPartyModel(event.target.value)}
+            />
+          </label>
+          <label className={styles.thirdPartyField}>
+            <span className={styles.thirdPartyLabel}>{t('settingsThirdPartyApiKey')}</span>
+            <input
+              className={styles.thirdPartyInput}
+              type="password"
+              value={apiKey}
+              placeholder={t('settingsThirdPartyApiKeyPlaceholder')}
+              autoComplete="new-password"
+              spellCheck={false}
+              onChange={(event) => setThirdPartyApiKey(event.target.value)}
+            />
+          </label>
+          <div className={styles.thirdPartyHint}>{t('settingsThirdPartyHint')}</div>
+        </div>
+      )}
+    </>
   )
 }
-
 /** 打开本地数据目录：网页版由本地服务调用系统文件管理器，桌面版走 Tauri 命令。 */
 const OpenDataDir = () => {
   const t = useTranslate()

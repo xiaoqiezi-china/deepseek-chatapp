@@ -4,7 +4,8 @@
  * 声明 deepseek_web_search / deepseek_read_url 时进入扩展模式。
  */
 
-export type ChatModel = 'deepseek-flash' | 'deepseek-v4-pro'
+/** DeepSeek 官方对话模型：当前固定使用 deepseek-flash。 */
+export type ChatModel = 'deepseek-flash'
 
 // ---------- 响应：内容块 ----------
 

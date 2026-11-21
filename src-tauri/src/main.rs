@@ -383,6 +383,144 @@ fn webview2_available() -> bool {
   true
 }
 
+/// 读取系统代理，供 Tauri 的 HTTP 插件显式配置；reqwest 不会自动读取 Windows 的 IE 代理。
+#[cfg(windows)]
+fn read_reg_string(handle: windows_sys::Win32::System::Registry::HKEY, name: &str) -> Option<String> {
+  use std::ffi::OsStr;
+  use std::os::windows::ffi::OsStrExt;
+  use windows_sys::Win32::System::Registry::{RegQueryValueExW, HKEY};
+
+  let name: Vec<u16> = OsStr::new(name).encode_wide().chain(Some(0)).collect();
+  let mut kind: u32 = 0;
+  let mut size: u32 = 0;
+  let handle: HKEY = handle;
+  let rc = unsafe {
+    RegQueryValueExW(
+      handle,
+      name.as_ptr(),
+      std::ptr::null_mut(),
+      &mut kind,
+      std::ptr::null_mut(),
+      &mut size,
+    )
+  };
+  if rc != 0 || size == 0 {
+    return None;
+  }
+  let mut buffer = vec![0u16; (size as usize) / 2 + 1];
+  let mut read_size = size;
+  let rc = unsafe {
+    RegQueryValueExW(
+      handle,
+      name.as_ptr(),
+      std::ptr::null_mut(),
+      &mut kind,
+      buffer.as_mut_ptr().cast::<u8>(),
+      &mut read_size,
+    )
+  };
+  if rc != 0 {
+    return None;
+  }
+  let len = buffer.iter().position(|value| *value == 0).unwrap_or(buffer.len());
+  Some(String::from_utf16_lossy(&buffer[..len]))
+}
+
+#[cfg(windows)]
+fn read_reg_dword(handle: windows_sys::Win32::System::Registry::HKEY, name: &str) -> Option<u32> {
+  use std::ffi::OsStr;
+  use std::os::windows::ffi::OsStrExt;
+  use windows_sys::Win32::System::Registry::{RegQueryValueExW, HKEY};
+
+  let name: Vec<u16> = OsStr::new(name).encode_wide().chain(Some(0)).collect();
+  let mut kind: u32 = 0;
+  let mut value: u32 = 0;
+  let mut size: u32 = 4;
+  let handle: HKEY = handle;
+  let rc = unsafe {
+    RegQueryValueExW(
+      handle,
+      name.as_ptr(),
+      std::ptr::null_mut(),
+      &mut kind,
+      (&mut value as *mut u32).cast::<u8>(),
+      &mut size,
+    )
+  };
+  if rc == 0 && kind == 4 {
+    Some(value)
+  } else {
+    None
+  }
+}
+
+#[cfg(windows)]
+fn normalize_proxy(raw: &str) -> Option<String> {
+  let mut https = None;
+  let mut http = None;
+  let mut plain = None;
+  for part in raw.split(';') {
+    let part = part.trim();
+    if part.is_empty() {
+      continue;
+    }
+    if let Some((scheme, address)) = part.split_once('=') {
+      if scheme.eq_ignore_ascii_case("https") {
+        https = Some(address.trim());
+      } else if scheme.eq_ignore_ascii_case("http") {
+        http = Some(address.trim());
+      }
+    } else {
+      plain = Some(part);
+    }
+  }
+  let address = https.or(http).or(plain)?.trim();
+  if address.is_empty() {
+    return None;
+  }
+  if address.contains("://") {
+    Some(address.to_string())
+  } else {
+    Some(format!("http://{address}"))
+  }
+}
+
+#[cfg(windows)]
+fn system_proxy_value() -> Option<String> {
+  use std::ffi::OsStr;
+  use std::os::windows::ffi::OsStrExt;
+  use windows_sys::Win32::System::Registry::{
+    RegCloseKey, RegOpenKeyExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
+  };
+
+  let key_path = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
+  let subkey: Vec<u16> = OsStr::new(key_path).encode_wide().chain(Some(0)).collect();
+  let mut handle: HKEY = 0;
+  if unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_READ, &mut handle) } != 0 {
+    return None;
+  }
+  let enabled = read_reg_dword(handle, "ProxyEnable").unwrap_or(0);
+  let server = read_reg_string(handle, "ProxyServer");
+  unsafe { RegCloseKey(handle) };
+  if enabled == 0 {
+    return None;
+  }
+  server.and_then(|raw| normalize_proxy(&raw))
+}
+
+/// 返回 Windows 系统代理地址，未启用时返回 null。仅桌面端使用。
+#[tauri::command]
+fn system_proxy() -> Option<String> {
+  #[cfg(windows)]
+  {
+    system_proxy_value()
+  }
+  #[cfg(not(windows))]
+  {
+    None
+  }
+}
+
 /// 弹出阻断式提示并引导安装 WebView2，返回是否继续启动。
 #[cfg(windows)]
 fn ensure_webview2() -> bool {
@@ -740,10 +878,12 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
+    .plugin(tauri_plugin_http::init())
     .invoke_handler(tauri::generate_handler![
       storage_request,
       report_startup,
       install_update,
+      system_proxy,
       code_runner::check_runtime,
       code_runner::run_code
     ])
@@ -778,7 +918,7 @@ mod tests {
   #[test]
   fn manifest_server_switches_download_url() {
     let base = json!({
-      "version": "1.1.2",
+      "version": "1.1.4",
       "notes": "test",
       "platforms": {
         "windows-x86_64": {

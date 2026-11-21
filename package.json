@@ -1,6 +1,6 @@
 {
   "name": "chat-demo",
-  "version": "1.1.2",
+  "version": "1.1.4",
   "description": "基于 DeepSeek API 的静态聊天示例。",
   "license": "MIT",
   "private": true,
@@ -21,6 +21,7 @@
   "dependencies": {
     "@capacitor/app": "7.0.0",
     "@capacitor/camera": "^7.0.5",
+    "@tauri-apps/plugin-http": "^2.9.0",
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.14.1",
     "@types/katex": "^0.16.5",

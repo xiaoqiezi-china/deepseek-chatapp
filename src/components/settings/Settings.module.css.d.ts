@@ -20,6 +20,13 @@ declare const styles: {
   readonly "themeOption": string;
   readonly "themeOptionSelected": string;
   readonly "description": string;
+  readonly "fixedValue": string;
+  readonly "thirdParty": string;
+  readonly "thirdPartyTitle": string;
+  readonly "thirdPartyField": string;
+  readonly "thirdPartyLabel": string;
+  readonly "thirdPartyInput": string;
+  readonly "thirdPartyHint": string;
   readonly "error": string;
   readonly "apiKey": string;
   readonly "apiKeySaved": string;
