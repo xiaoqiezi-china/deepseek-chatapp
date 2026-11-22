@@ -127,7 +127,7 @@ export const zh = {
   avatarMenuSettingsDialogThemeSelectLightOption: '浅色',
   avatarMenuSettingsDialogThemeSelectDarkOption: '深色',
   avatarMenuSettingsDialogThemeSelectSystemOption: '跟随系统',
-  apiKeyStart: '输入 API Key 开始使用',
+  apiKeyStart: 'DeepSeek API Key（按功能需要）',
   apiKeyEdit: '修改 API Key',
   apiKeyPlaceholder: '请输入 API Key',
   apiKeyVerifying: '正在验证...',
@@ -204,7 +204,8 @@ export const zh = {
   accountTitle: '账号',
   accountLogin: '登录',
   accountLoginTitle: '登录 DeepSeek',
-  accountLoginDescription: '输入 API Key 以使用聊天功能。密钥仅保存在你的设备上。',
+  accountLoginDescription:
+    '填写 DeepSeek API Key 后可使用 DeepSeek 模型对话、联网搜索、朗读、语音输入和附件上传；第三方模型纯文本对话无需填写。密钥仅保存在你的设备上。',
   accountApiKeyLabel: 'API Key',
   accountApiKeyPlaceholder: '请输入 API Key',
   accountLoginButton: '登录并查看账户',
@@ -225,6 +226,12 @@ export const zh = {
   accountLoadFailed: '账户信息加载失败',
   accountKeyInvalid: 'API Key 无效，请检查后重试',
   accountKeyRequired: '请输入 API Key',
+  deepSeekKeyRequiredTitle: '需要 DeepSeek API Key',
+  deepSeekKeyRequiredChat: 'DeepSeek 模型对话依赖 DeepSeek API，请先填写 API Key。',
+  deepSeekKeyRequiredSearch: '联网搜索使用 DeepSeek API，请先填写 DeepSeek API Key。',
+  deepSeekKeyRequiredTts: '朗读使用 DeepSeek TTS，请先填写 DeepSeek API Key。',
+  deepSeekKeyRequiredVoice: '语音输入使用 DeepSeek 语音识别，请先填写 DeepSeek API Key。',
+  deepSeekKeyRequiredAttachment: '附件上传使用 DeepSeek Files API，请先填写 DeepSeek API Key。',
   accountRetry: '重新登录',
   // 系统提示词
   systemPromptLabel: '系统提示词',
@@ -235,7 +242,7 @@ export const zh = {
   systemPromptCharacterCount: '{count} 字',
   // 首屏登录引导
   welcomeLoginTitle: '开始使用 DeepSeek',
-  welcomeLoginDescription: '登录以继续对话',
+  welcomeLoginDescription: '填写 DeepSeek API Key 以使用依赖 DeepSeek 的功能',
   // AI 消息编辑
   editReply: '修改回答',
   editReplyPlaceholder: '编辑这条回答的内容，修改后将作为后续对话的上下文',
@@ -256,7 +263,7 @@ export const zh = {
   settingsThirdPartyApiKey: 'API Key',
   settingsThirdPartyApiKeyPlaceholder: '请输入第三方 API Key',
   settingsThirdPartyHint:
-    '仅支持自定义文本生成与推理模型 API，网络搜索、TTS 等仍使用 DeepSeek API，需要在账户处填写 DeepSeek API Key，且部分功能将会单独计费（由 DS 官方收费）。已兼容gemini,更多兼容需求前往仓库提交issues。',
+    '仅支持自定义文本生成与推理模型 API，网络搜索、TTS、语音输入、附件上传等仍使用 DeepSeek API，仅在用到这些功能时需要在账户处填写 DeepSeek API Key，且部分功能将会单独计费（由 DS 官方收费）。已兼容gemini,更多兼容需求前往仓库提交issues。',
   thirdPartyApiUrlRequired: '请先在设置中填写第三方 API 地址',
   thirdPartyModelRequired: '请先在设置中填写第三方模型 ID',
   thirdPartyApiKeyRequired: '请先在设置中填写第三方 API Key',

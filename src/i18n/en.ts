@@ -134,7 +134,7 @@ export const en = {
   avatarMenuSettingsDialogThemeSelectLightOption: 'Light',
   avatarMenuSettingsDialogThemeSelectDarkOption: 'Dark',
   avatarMenuSettingsDialogThemeSelectSystemOption: 'System',
-  apiKeyStart: 'Enter an API Key to get started',
+  apiKeyStart: 'DeepSeek API Key (feature-dependent)',
   apiKeyEdit: 'Edit API Key',
   apiKeyPlaceholder: 'Enter API Key',
   apiKeyVerifying: 'Verifying...',
@@ -215,7 +215,8 @@ export const en = {
   accountTitle: 'Account',
   accountLogin: 'Sign in',
   accountLoginTitle: 'Sign in to DeepSeek',
-  accountLoginDescription: 'Enter your API Key to start chatting. Your key stays on your device.',
+  accountLoginDescription:
+    'Add a DeepSeek API Key to use DeepSeek models, web search, read-aloud, voice input, and file attachments. Plain-text chat with third-party models does not require one. Your key stays on your device.',
   accountApiKeyLabel: 'API Key',
   accountApiKeyPlaceholder: 'Enter your API Key',
   accountLoginButton: 'Sign in & view account',
@@ -236,6 +237,13 @@ export const en = {
   accountLoadFailed: 'Failed to load account info',
   accountKeyInvalid: 'Invalid API Key. Please check and try again.',
   accountKeyRequired: 'Please enter your API Key',
+  deepSeekKeyRequiredTitle: 'DeepSeek API Key required',
+  deepSeekKeyRequiredChat: 'DeepSeek model chat requires a DeepSeek API Key. Please add one first.',
+  deepSeekKeyRequiredSearch: 'Web search uses the DeepSeek API. Please add a DeepSeek API Key first.',
+  deepSeekKeyRequiredTts: 'Read-aloud uses DeepSeek TTS. Please add a DeepSeek API Key first.',
+  deepSeekKeyRequiredVoice: 'Voice input uses DeepSeek speech recognition. Please add a DeepSeek API Key first.',
+  deepSeekKeyRequiredAttachment:
+    'File attachments use the DeepSeek Files API. Please add a DeepSeek API Key first.',
   accountRetry: 'Sign in again',
   // System prompt
   systemPromptLabel: 'System prompt',
@@ -246,7 +254,7 @@ export const en = {
   systemPromptCharacterCount: '{count} chars',
   // Welcome login gate
   welcomeLoginTitle: 'Get started with DeepSeek',
-  welcomeLoginDescription: 'Sign in to continue chatting',
+  welcomeLoginDescription: 'Add a DeepSeek API Key to use DeepSeek-powered features',
   // AI message edit
   editReply: 'Edit reply',
   editReplyPlaceholder: 'Edit this reply; the changes will be used as context for later messages',
@@ -267,7 +275,7 @@ export const en = {
   settingsThirdPartyApiKey: 'API Key',
   settingsThirdPartyApiKeyPlaceholder: 'Enter the third-party API Key',
   settingsThirdPartyHint:
-    'Only custom text generation and reasoning model APIs are supported. Web search, TTS and other features still use the DeepSeek API; add a DeepSeek API Key in Account. Some features are billed separately by DeepSeek. Gemini is supported; for more compatibility requests, open an issue in the repository.',
+    'Only custom text generation and reasoning model APIs are supported. Web search, TTS, voice input, and file attachments still use the DeepSeek API; a DeepSeek API Key is only required when using those features. Some features are billed separately by DeepSeek. Gemini is supported; for more compatibility requests, open an issue in the repository.',
   thirdPartyApiUrlRequired: 'Fill in the third-party API URL in Settings first',
   thirdPartyModelRequired: 'Fill in the third-party model ID in Settings first',
   thirdPartyApiKeyRequired: 'Fill in the third-party API Key in Settings first',

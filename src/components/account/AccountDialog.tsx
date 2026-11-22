@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { useTranslate } from '../../i18n/index.js'
+import { useTranslate, type TranslationKey } from '../../i18n/index.js'
 import { getBalance, getModels, verifyApiKey, type BalanceInfo, type ModelInfo } from '../../services/api/client.js'
 import { classifyApiError } from '../../services/api/errors.js'
 import { setApiKey, useSettings } from '../../services/settings.js'
 import { Button } from '../base/Button.js'
+import { IconWarningOutline16 } from '../base/icons.js'
 import { Modal } from '../base/Modal.js'
 import styles from './AccountDialog.module.css'
-import { closeAccountDialog, useAccountDialog } from './accountState.js'
+import { closeAccountDialog, useAccountDialog, type DeepSeekKeyReason } from './accountState.js'
+
+const KEY_REQUIRED_TEXT: Record<DeepSeekKeyReason, TranslationKey> = {
+  chat: 'deepSeekKeyRequiredChat',
+  search: 'deepSeekKeyRequiredSearch',
+  tts: 'deepSeekKeyRequiredTts',
+  voice: 'deepSeekKeyRequiredVoice',
+  attachment: 'deepSeekKeyRequiredAttachment',
+}
 
 type Info = { balance: BalanceInfo[]; available: boolean | null; models: ModelInfo[] }
 
@@ -19,6 +28,7 @@ export const AccountDialog = () => {
 const AccountDialogContent = () => {
   const t = useTranslate()
   const apiKey = useSettings((state) => state.apiKey)
+  const reason = useAccountDialog((state) => state.reason)
   const loggedIn = !!apiKey
   const [value, setValue] = useState('')
   const [editing, setEditing] = useState(!loggedIn)
@@ -84,7 +94,13 @@ const AccountDialogContent = () => {
 
   return (
     <Modal
-      title={loggedIn && !editing ? t('accountTitle') : t('accountLoginTitle')}
+      title={
+        loggedIn && !editing
+          ? t('accountTitle')
+          : reason
+            ? t('deepSeekKeyRequiredTitle')
+            : t('accountLoginTitle')
+      }
       closable
       className={styles.accountModal}
       onClose={closeAccountDialog}
@@ -150,6 +166,12 @@ const AccountDialogContent = () => {
         </div>
       ) : (
         <div className={styles.accountLogin}>
+          {reason && !loggedIn ? (
+            <div className={styles.keyNotice} role="alert">
+              <IconWarningOutline16 />
+              <span>{t(KEY_REQUIRED_TEXT[reason])}</span>
+            </div>
+          ) : null}
           <div className={styles.accountDescription}>{t('accountLoginDescription')}</div>
           <label className={styles.accountLabel} htmlFor="account-key-input">{t('accountApiKeyLabel')}</label>
           <input

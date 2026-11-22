@@ -17,6 +17,25 @@
   line-height: 1.5;
 }
 
+.keyNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--dsw-alias-brand-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-skeleton);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.keyNotice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--dsw-alias-brand-primary);
+}
+
 .accountLabel {
   font-size: 14px;
   font-weight: 500;

@@ -8,7 +8,7 @@ import { canContinueReply } from '../../services/chat/reply.js'
 import { continueReply, editReply, regenerateReply } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
-import { openAccountDialog } from '../account/accountState.js'
+import { ensureCanSend, openAccountDialog } from '../account/accountState.js'
 import { IconButton } from '../base/IconButton.js'
 import { Button } from '../base/Button.js'
 import { Markdown } from '../markdown/Markdown.js'
@@ -171,7 +171,7 @@ export const AssistantMessage = memo(function AssistantMessage({
                 <button
                   type="button"
                   className={styles.noticeAction}
-                  onClick={openAccountDialog}
+                  onClick={() => openAccountDialog()}
                 >
                   {t('changeApiKey')}
                 </button>
@@ -228,6 +228,9 @@ export const AssistantMessage = memo(function AssistantMessage({
               tooltipPlacement="bottom"
               disabled={busy || refused}
               onClick={() => {
+                if (!ensureCanSend()) {
+                  return
+                }
                 stopReadAloud()
                 regenerateReply(sessionId, message.id)
               }}
@@ -240,6 +243,9 @@ export const AssistantMessage = memo(function AssistantMessage({
               className={styles.continueButton}
               disabled={busy}
               onClick={() => {
+                if (!ensureCanSend(message.search)) {
+                  return
+                }
                 stopReadAloud()
                 continueReply(sessionId, message.id)
               }}

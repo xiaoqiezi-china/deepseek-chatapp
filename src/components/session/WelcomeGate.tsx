@@ -22,7 +22,7 @@ export const WelcomeGate = () => {
         <div className={styles.whale}><DeepSeekWhaleIcon /></div>
         <div className={styles.title}>{t('welcomeLoginTitle')}</div>
         <div className={styles.description}>{t('welcomeLoginDescription')}</div>
-        <Button variant="primary" size="l" className={styles.loginButton} onClick={openAccountDialog}>
+        <Button variant="primary" size="l" className={styles.loginButton} onClick={() => openAccountDialog()}>
           {t('accountLogin')}
         </Button>
       </div>

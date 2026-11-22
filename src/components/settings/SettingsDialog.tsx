@@ -658,7 +658,7 @@ const AccountSetting = () => {
         <div className={styles.accountGateWhale}><DeepSeekWhaleIcon /></div>
         <div className={styles.accountGateTitle}>{t('welcomeLoginTitle')}</div>
         <div className={styles.accountGateDescription}>{t('welcomeLoginDescription')}</div>
-        <Button variant="primary" size="m" className={styles.accountGateButton} onClick={openAccountDialog}>
+        <Button variant="primary" size="m" className={styles.accountGateButton} onClick={() => openAccountDialog()}>
           {t('accountLogin')}
         </Button>
       </div>
@@ -699,7 +699,7 @@ const AccountSetting = () => {
       ) : null}
       <div className={styles.accountActions}>
         <Button variant="outlined" size="m" onClick={() => { if (apiKey) { void load(apiKey) } }} disabled={loading}>{t('accountRefresh')}</Button>
-        <Button variant="outlined" size="m" onClick={openAccountDialog}>{t('accountChangeKey')}</Button>
+        <Button variant="outlined" size="m" onClick={() => openAccountDialog()}>{t('accountChangeKey')}</Button>
       </div>
     </div>
   )

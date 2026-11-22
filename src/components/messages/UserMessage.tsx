@@ -9,7 +9,7 @@ import { stopReadAloud } from '../../services/speech/readAloud.js'
 import type { UserMessage as UserMessageType } from '../../services/chat/types.js'
 import { Button } from '../base/Button.js'
 import { IconButton } from '../base/IconButton.js'
-import { ensureApiKey } from '../settings/settingsDialogState.js'
+import { ensureCanSend, requireDeepSeekKey } from '../account/accountState.js'
 import {
   BranchSwitcher,
   type MessageVersions,
@@ -55,7 +55,7 @@ export const UserMessage = memo(function UserMessage({
   }, [editing, draft])
 
   const sendEdit = () => {
-    if (canSend && ensureApiKey() && editMessage(sessionId, message.id, draft.trim())) {
+    if (canSend && ensureCanSend() && editMessage(sessionId, message.id, draft.trim())) {
       stopReadAloud()
       setEditing(false)
     }
@@ -75,7 +75,15 @@ export const UserMessage = memo(function UserMessage({
             <MessageFile
               key={file.id}
               file={file}
-              onRetry={retryUploadId ? () => retryUpload(sessionId, retryUploadId) : null}
+              onRetry={
+                retryUploadId
+                  ? () => {
+                      if (requireDeepSeekKey('attachment')) {
+                        retryUpload(sessionId, retryUploadId)
+                      }
+                    }
+                  : null
+              }
             />
           ))}
         </div>

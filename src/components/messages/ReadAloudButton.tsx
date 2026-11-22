@@ -1,4 +1,5 @@
 import { useTranslate } from '../../i18n/index.js'
+import { requireDeepSeekKey } from '../account/accountState.js'
 import {
   describeReadAloudError,
   toggleReadAloud,
@@ -18,9 +19,12 @@ export const ReadAloudButton = ({ messageId, text }: { messageId: string; text: 
       icon={status === 'idle' ? <IconPlayMediaOutline16 /> : <ReadingBars mode={status} />}
       tooltip={status === 'idle' ? t('ttsPlay') : t('ttsStop')}
       tooltipPlacement="bottom"
-      onClick={() =>
+      onClick={() => {
+        if (!requireDeepSeekKey('tts')) {
+          return
+        }
         toggleReadAloud(messageId, text, (error) => showToast(describeReadAloudError(error)))
-      }
+      }}
     />
   )
 }
