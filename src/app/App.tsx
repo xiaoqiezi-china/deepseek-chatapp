@@ -10,6 +10,7 @@ import {
   selectSession,
   useChatStore,
 } from '../services/chat/store.js'
+import { bindCliCalls } from '../services/cli.js'
 import { SearchPanel } from '../components/search/SearchPanel.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
 import { SessionView } from '../components/session/SessionView.js'
@@ -67,6 +68,8 @@ export const App = () => {
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
   useEffect(() => onUploadNotice(showToast), [])
   useEffect(bindChatPersistence, [])
+  // 桌面端被其他应用带命令行参数唤起时，在已运行的窗口里执行
+  useEffect(bindCliCalls, [])
 
   // 搜索结果面板只属于当前会话
   useEffect(closeSearchPanel, [activeId])

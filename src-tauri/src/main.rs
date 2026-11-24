@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 mod code_runner;
@@ -1019,12 +1019,142 @@ fn boost_startup_priority() {
 #[cfg(not(windows))]
 fn boost_startup_priority() {}
 
+// ---- 命令行调用 ----
+
+/// 附件体积上限，与上传限制保持一致。
+const MAX_CLI_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// 待前端取走的命令行调用。第二个实例可能早于页面就绪到达，因此先入队再通知。
+static CLI_QUEUE: Mutex<Vec<Value>> = Mutex::new(Vec::new());
+
+/// 其他应用启动本应用时传入的参数。
+#[derive(Debug, Default, PartialEq, Eq)]
+struct CliOptions {
+  text: Option<String>,
+  files: Vec<String>,
+  search: bool,
+  thinking: bool,
+  send: bool,
+  new: bool,
+}
+
+fn resolve_cli_path(value: &str, cwd: &Path) -> String {
+  let path = Path::new(value);
+  if path.is_absolute() {
+    path.to_string_lossy().into_owned()
+  } else {
+    cwd.join(path).to_string_lossy().into_owned()
+  }
+}
+
+/// 解析 `--text`、`--file`、`--search`、`--thinking`、`--send`、`--new`，
+/// 同时支持 `--opt value` 与 `--opt=value`。第一个参数是可执行文件路径。
+/// 既没有文本也没有附件时返回 None：普通启动不应改动界面状态。
+fn parse_cli_args(args: Vec<String>, cwd: &Path) -> Option<CliOptions> {
+  let mut options = CliOptions::default();
+  let mut args = args.into_iter();
+  let _ = args.next();
+  while let Some(raw) = args.next() {
+    let (flag, inline) = match raw.split_once('=') {
+      Some((flag, value)) if flag.starts_with("--") => (flag.to_string(), Some(value.to_string())),
+      _ => (raw, None),
+    };
+    let mut take_value = || inline.clone().or_else(|| args.next());
+    match flag.as_str() {
+      "--text" => options.text = take_value(),
+      "--file" => {
+        if let Some(value) = take_value() {
+          options.files.push(resolve_cli_path(&value, cwd));
+        }
+      }
+      "--search" => options.search = true,
+      "--thinking" => options.thinking = true,
+      "--send" => options.send = true,
+      "--new" => options.new = true,
+      // 未识别的参数（如开发模式附加的参数）直接忽略
+      _ => {}
+    }
+  }
+  if options.text.is_none() && options.files.is_empty() {
+    None
+  } else {
+    Some(options)
+  }
+}
+
+fn queue_cli_invocation(app: &tauri::AppHandle, options: CliOptions) {
+  let payload = json!({
+    "text": options.text,
+    "files": options.files,
+    "search": options.search,
+    "thinking": options.thinking,
+    "send": options.send,
+    "new": options.new,
+  });
+  if let Ok(mut queue) = CLI_QUEUE.lock() {
+    queue.push(payload);
+  }
+  // 事件只是唤醒信号，数据统一由 take_cli_invocations 取走，避免重复执行。
+  let _ = app.emit("cli-invoke", ());
+}
+
+fn focus_main_window(app: &tauri::AppHandle) {
+  if let Some(window) = app.get_webview_window("main") {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+  }
+}
+
+/// 取走待处理的命令行调用；前端在页面就绪后调用一次，之后由事件唤醒。
+#[tauri::command]
+fn take_cli_invocations() -> Vec<Value> {
+  CLI_QUEUE
+    .lock()
+    .map(|mut queue| std::mem::take(&mut *queue))
+    .unwrap_or_default()
+}
+
+/// 读取 `--file` 指定的附件。路径由调用方给出，前端只按命令行传入的路径请求。
+#[tauri::command]
+fn read_cli_file(path: String) -> Result<Value, String> {
+  let file = PathBuf::from(&path);
+  let metadata = fs::metadata(&file).map_err(|error| format!("{path}: {error}"))?;
+  if !metadata.is_file() {
+    return Err(format!("{path}: not a file"));
+  }
+  if metadata.len() > MAX_CLI_FILE_BYTES {
+    return Err(format!("{}: larger than {} bytes", path, MAX_CLI_FILE_BYTES));
+  }
+  let bytes = fs::read(&file).map_err(|error| format!("{path}: {error}"))?;
+  let name = file
+    .file_name()
+    .and_then(|value| value.to_str())
+    .unwrap_or("attachment")
+    .to_string();
+  Ok(json!({ "name": name, "base64": base64_encode(&bytes) }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   if !ensure_webview2() {
     std::process::exit(1);
   }
   tauri::Builder::default()
+    // 单实例插件必须最先注册：第二个实例把参数交给已运行的窗口后自行退出。
+    .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+      if let Some(options) = parse_cli_args(argv, Path::new(&cwd)) {
+        queue_cli_invocation(app, options);
+      }
+      focus_main_window(app);
+    }))
+    .setup(|app| {
+      let cwd = std::env::current_dir().unwrap_or_default();
+      if let Some(options) = parse_cli_args(std::env::args().collect(), &cwd) {
+        queue_cli_invocation(app.handle(), options);
+      }
+      Ok(())
+    })
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_http::init())
@@ -1033,6 +1163,8 @@ pub fn run() {
       report_startup,
       install_update,
       system_proxy,
+      take_cli_invocations,
+      read_cli_file,
       code_runner::check_runtime,
       code_runner::run_code
     ])
@@ -1062,6 +1194,45 @@ mod tests {
     let mut response = String::new();
     stream.read_to_string(&mut response).expect("read");
     response
+  }
+
+  #[test]
+  fn cli_arguments_are_parsed_for_external_callers() {
+    let cwd = std::path::Path::new("C:/work");
+    let options = parse_cli_args(
+      vec![
+        "Deepseek CE.exe".to_string(),
+        "--text".to_string(),
+        "你好".to_string(),
+        "--file".to_string(),
+        "shot.png".to_string(),
+        "--file=doc.pdf".to_string(),
+        "--search".to_string(),
+        "--send".to_string(),
+        "--unknown".to_string(),
+      ],
+      cwd,
+    )
+    .expect("parsed options");
+    assert_eq!(options.text.as_deref(), Some("你好"));
+    assert_eq!(
+      options.files,
+      vec![
+        cwd.join("shot.png").to_string_lossy().into_owned(),
+        cwd.join("doc.pdf").to_string_lossy().into_owned(),
+      ]
+    );
+    assert!(options.search && options.send && !options.thinking && !options.new);
+
+    let absolute = if cfg!(windows) { "C:/tmp/a.txt" } else { "/tmp/a.txt" };
+    let options = parse_cli_args(vec!["app".to_string(), "--file".to_string(), absolute.to_string()], cwd)
+      .expect("file only");
+    assert_eq!(options.files, vec![absolute.to_string()]);
+    assert!(options.text.is_none());
+
+    // 没有文本也没有附件：普通启动，不改动界面状态
+    assert!(parse_cli_args(vec!["app".to_string(), "--new".to_string()], cwd).is_none());
+    assert!(parse_cli_args(vec!["app".to_string()], cwd).is_none());
   }
 
   #[test]

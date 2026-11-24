@@ -55,6 +55,7 @@ Deepseek CE 是基于 DeepSeek 开源 [chat-demo](https://github.com/deepseek-ai
 - **设置**：简体中文 / English、浅色 / 深色 / 跟随系统、朗读音色、位置、模型（默认 `deepseek-flash`）。
 - **历史记录**：ZIP 导入导出、删除全部对话。
 - **自动更新**：桌面端与 Android 端可从 GitHub Releases 检查更新，Android 支持应用内下载安装。
+- **外部调用**：桌面端支持命令行参数（`--text`、`--file`、`--search`、`--thinking`、`--send`、`--new`）；再次启动不会开新副本，而是把请求交给已运行的窗口执行。
 
 ## 下载
 

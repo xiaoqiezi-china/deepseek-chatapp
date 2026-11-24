@@ -174,6 +174,8 @@ export const zh = {
   uploadFileCountLimit: '已上传文件数达到上限（{limit} 个），可 ',
   uploadStorageLimit: '已上传文件占用空间达到上限（{limit}GB），可 ',
   uploadDeleteFiles: '删除文件',
+  cliFileReadFailed: '无法读取附件文件，请检查路径后重试',
+  cliSendFailed: '无法发送消息，请检查当前会话状态',
   dragFileToUpload: '文件拖动到此处即可上传',
   dragFileDesc: '最多 {count} 个，每个 {size}MB',
   voiceInput: '语音输入',

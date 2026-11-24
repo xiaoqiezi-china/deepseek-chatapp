@@ -184,6 +184,8 @@ export const en = {
   uploadFileCountLimit: 'Uploaded file limit reached ({limit} files). ',
   uploadStorageLimit: 'Uploaded file storage limit reached ({limit} GB). ',
   uploadDeleteFiles: 'Delete files',
+  cliFileReadFailed: 'Could not read the attachment file. Check the path and try again.',
+  cliSendFailed: 'Could not send the message. Check the current chat state.',
   dragFileToUpload: 'Drop files here to upload',
   dragFileDesc: 'Up to {count} files, {size} MB each',
   voiceInput: 'Voice input',
