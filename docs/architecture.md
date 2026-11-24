@@ -170,12 +170,13 @@ ZIP 顺序：`manifest.json` → `user.json`（不导入）→ `chat_sessions/<i
 | --- | --- |
 | `--text <text>` | 填入问题文本（覆盖当前草稿） |
 | `--file <path>` | 附加一个文件，交给草稿的上传流程；可重复，相对路径按调用方 cwd 解析 |
-| `--search` / `--thinking` | 打开智能搜索 / 深度思考（只置为开启，不会关闭） |
+| `--search` / `--thinking` | 打开智能搜索 / 深度思考 |
+| `--unsearch` / `--unthinking` | 关闭对应的开关（`--no-search` / `--no-thinking` 等价；多个开关按出现顺序，后者覆盖前者） |
 | `--send` | 参数填好后直接发送，等附件上传与会话停止生成 |
 | `--new` | 强制新建会话 |
 
 目标会话：`--new` 或当前停在新会话页面 → 新会话（草稿挂在 `null` 上，发送时才创建）；停在某个会话里 → 该会话。
-既没有 `--text` 也没有 `--file` 时不做任何事，普通启动不会改动界面状态。
+没有任何可识别参数时不做任何事，普通启动不会改动界面状态；只带开关（如 `--unsearch`）也是有效调用。
 
 实现：Rust 的 `parse_cli_args` 解析后写入 `CLI_QUEUE` 并发 `cli-invoke` 事件；前端
 `bindCliCalls`（[src/services/cli.ts](../src/services/cli.ts)）注册监听后先取走队列再执行，所以第二个实例

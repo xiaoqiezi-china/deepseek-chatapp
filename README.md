@@ -53,7 +53,7 @@ The result is a small download, a short install and a launch that finishes in ab
 - **Settings** — Chinese / English, light / dark / follow system, TTS voice, location and model (defaults to `deepseek-flash`).
 - **History** — ZIP import and export, delete all conversations.
 - **Updates** — the desktop and Android builds check GitHub Releases; Android downloads the APK in place.
-- **Automation** — the desktop build accepts command-line arguments (`--text`, `--file`, `--search`, `--thinking`, `--send`, `--new`); launching it again hands the request to the running window instead of opening a second copy.
+- **Automation** — the desktop build accepts command-line arguments (`--text`, `--file`, `--search` / `--unsearch`, `--thinking` / `--unthinking`, `--send`, `--new`); launching it again hands the request to the running window instead of opening a second copy.
 
 ## Download
 

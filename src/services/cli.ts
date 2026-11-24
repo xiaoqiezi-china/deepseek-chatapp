@@ -12,8 +12,9 @@ export type CliInvocation = {
   text?: string | null
   /** --file 传入的绝对路径，未识别的文件由草稿的校验拒绝 */
   files: string[]
-  search: boolean
-  thinking: boolean
+  /** null 表示调用方没有提到该开关，保持界面当前状态 */
+  search: boolean | null
+  thinking: boolean | null
   send: boolean
   new: boolean
 }
@@ -145,11 +146,11 @@ const applyInvocation = async (invocation: CliInvocation) => {
   }
   // activeId 为 null 表示新会话页面：草稿挂在 null 上，发送时才创建会话。
   const sessionId = useChatStore.getState().activeId
-  if (invocation.search) {
-    setSearch(true)
+  if (typeof invocation.search === 'boolean') {
+    setSearch(invocation.search)
   }
-  if (invocation.thinking) {
-    setThinking(true)
+  if (typeof invocation.thinking === 'boolean') {
+    setThinking(invocation.thinking)
   }
   if (invocation.text) {
     setDraftText(sessionId, invocation.text)

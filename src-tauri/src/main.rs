@@ -1032,8 +1032,9 @@ static CLI_QUEUE: Mutex<Vec<Value>> = Mutex::new(Vec::new());
 struct CliOptions {
   text: Option<String>,
   files: Vec<String>,
-  search: bool,
-  thinking: bool,
+  /// None 表示调用方没提这个开关，保持界面当前状态。
+  search: Option<bool>,
+  thinking: Option<bool>,
   send: bool,
   new: bool,
 }
@@ -1047,8 +1048,8 @@ fn resolve_cli_path(value: &str, cwd: &Path) -> String {
   }
 }
 
-/// 解析 `--text`、`--file`、`--search`、`--thinking`、`--send`、`--new`，
-/// 同时支持 `--opt value` 与 `--opt=value`。第一个参数是可执行文件路径。
+/// 解析 `--text`、`--file`、`--search`/`--unsearch`、`--thinking`/`--unthinking`、
+/// `--send`、`--new`，同时支持 `--opt value` 与 `--opt=value`。第一个参数是可执行文件路径。
 /// 一个开关都没识别到时返回 None：普通启动（或开发模式附加的参数）不应改动界面状态；
 /// 只带开关的调用（如 `--thinking`、`--send`）是有效调用，必须入队。
 fn parse_cli_args(args: Vec<String>, cwd: &Path) -> Option<CliOptions> {
@@ -1075,11 +1076,19 @@ fn parse_cli_args(args: Vec<String>, cwd: &Path) -> Option<CliOptions> {
       }
       "--search" => {
         recognized = true;
-        options.search = true;
+        options.search = Some(true);
+      }
+      "--unsearch" | "--no-search" => {
+        recognized = true;
+        options.search = Some(false);
       }
       "--thinking" => {
         recognized = true;
-        options.thinking = true;
+        options.thinking = Some(true);
+      }
+      "--unthinking" | "--no-thinking" => {
+        recognized = true;
+        options.thinking = Some(false);
       }
       "--send" => {
         recognized = true;
@@ -1240,7 +1249,9 @@ mod tests {
         cwd.join("doc.pdf").to_string_lossy().into_owned(),
       ]
     );
-    assert!(options.search && options.send && !options.thinking && !options.new);
+    assert_eq!(options.search, Some(true));
+    assert!(options.send && !options.new);
+    assert_eq!(options.thinking, None);
 
     let absolute = if cfg!(windows) { "C:/tmp/a.txt" } else { "/tmp/a.txt" };
     let options = parse_cli_args(vec!["app".to_string(), "--file".to_string(), absolute.to_string()], cwd)
@@ -1251,8 +1262,28 @@ mod tests {
     // 只带开关的调用是有效调用：--thinking / --search / --send 必须能单独生效
     let options = parse_cli_args(vec!["app".to_string(), "--thinking".to_string()], cwd)
       .expect("flag only");
-    assert!(options.thinking && !options.search && !options.send);
+    assert_eq!(options.thinking, Some(true));
+    assert_eq!(options.search, None);
+    assert!(!options.send && !options.new);
     assert!(options.text.is_none() && options.files.is_empty());
+
+    // 关闭开关：--unsearch / --unthinking（--no-* 为等价写法），后出现的覆盖前面的
+    let options = parse_cli_args(vec!["app".to_string(), "--unthinking".to_string()], cwd)
+      .expect("unthinking");
+    assert_eq!(options.thinking, Some(false));
+    let options = parse_cli_args(vec!["app".to_string(), "--no-search".to_string()], cwd)
+      .expect("no-search");
+    assert_eq!(options.search, Some(false));
+    let options = parse_cli_args(
+      vec![
+        "app".to_string(),
+        "--search".to_string(),
+        "--unsearch".to_string(),
+      ],
+      cwd,
+    )
+    .expect("last wins");
+    assert_eq!(options.search, Some(false));
     let options = parse_cli_args(vec!["app".to_string(), "--send".to_string()], cwd).expect("send");
     assert!(options.send);
     let options = parse_cli_args(vec!["app".to_string(), "--new".to_string()], cwd).expect("new");
