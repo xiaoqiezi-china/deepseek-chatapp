@@ -88,11 +88,18 @@ export const clearStaging = async (): Promise<void> => {
   await jsonRequest('/staging/clear', { method: 'POST' })
 }
 
-export const addStagingSession = async (session: Session): Promise<void> => {
+const writeStagingSession = async (session: Session): Promise<void> => {
   await jsonRequest('/staging/sessions/' + encodeURIComponent(session.id), {
     method: 'PUT',
     body: JSON.stringify(session),
   })
+}
+
+/** 导入按批写入；存储端点一次只接受一个会话，这里顺序发出。 */
+export const addStagingSessions = async (sessions: Session[]): Promise<void> => {
+  for (const session of sessions) {
+    await writeStagingSession(session)
+  }
 }
 
 export const saveStagingFiles = async (files: StoredFile[]): Promise<void> => {
@@ -101,7 +108,14 @@ export const saveStagingFiles = async (files: StoredFile[]): Promise<void> => {
   }
 }
 
-export const updateStagingFileTypes = async (types: ReadonlyMap<string, string>): Promise<void> => {
+/**
+ * 回填导入图片的 MIME。sessionIds 是 IndexedDB 版本用于缩小事务范围的提示，
+ * 存储服务端按全部暂存会话回填，这里不需要使用。
+ */
+export const updateStagingFileTypes = async (
+  types: ReadonlyMap<string, string>,
+  _sessionIds?: ReadonlySet<string>
+): Promise<void> => {
   await jsonRequest('/staging/file-types', {
     method: 'POST',
     body: JSON.stringify(Object.fromEntries(types)),
