@@ -149,6 +149,10 @@ ZIP 顺序：`manifest.json` → `user.json`（不导入）→ `chat_sessions/<i
 `services/chat/history/`，自带 zip 读（流式）与写（fflate）。
 导出含会话与图片原件，不含 API Key 与设置；导入先写暂存，成功后 `commitStaging` 整目录换位。
 
+导入细节（v0.1.4 上游同步后）：按会话处理，会话 JSON 解析完立即连同它的图片一起写入暂存
+（会话 32 条 / 2 MB、图片 16 张 / 4 MB 分批），解析完成后按原件字节回填图片 MIME；`importArchive(file, onProgress)`
+上报「已处理会话数 / 总数」，设置弹窗据此显示进度条。
+
 ## 11. 平台能力差异
 
 | 能力 | Web | 桌面 | Android |
@@ -161,7 +165,7 @@ ZIP 顺序：`manifest.json` → `user.json`（不导入）→ `chat_sessions/<i
 ## 12. 构建、校验与发布
 
 ```sh
-pnpm type      # tsc 全量类型检查（含 server/）
+pnpm type      # tsc 类型检查（仅 src/；server/ 由 lint 覆盖）
 pnpm lint      # oxlint，server/ 单独放宽 curly / no-explicit-any
 pnpm build     # rspack → dist/
 pnpm dev       # web :8090 + server :8091

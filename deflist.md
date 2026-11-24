@@ -39,7 +39,9 @@
 
 ## 历史归档
 
-- ZIP 流式读 / readArchive | src/services/chat/history/zipReader.ts::readArchive | 可用 | 先 isZipFile；只支持归档用到的压缩方法
+- ZIP 流式读 / readArchive | src/services/chat/history/zipReader.ts::readArchive | 可用 | 先 isZipFile；条目流按需读取，可延后到枚举结束后再消费
+- ZIP 条目读取 / readEntry | src/services/chat/history/zipReader.ts::readEntry | 可用 | 传 detectType 时最多读前 16 字节推断 MIME；不需要的条目必须 skipEntry 以校验 CRC
+- 归档导入 / importArchive | src/services/chat/history/importArchive.ts::importArchive | 可用 | 只写暂存，需先 clearStaging 后调用并自行 commitStaging；onProgress 的 total 在读目录后才可知
 - ZIP 写 / writeArchive | src/services/chat/history/zipWriter.ts::writeArchive | 可用 | 一次性在内存组装，超限抛 ArchiveLimitError
 - 归档转本地会话 | src/services/chat/history/toLocal.ts::toLocalSession | 可用 | 仅接受 v3 格式，图片以路径映射返回
 
@@ -48,4 +50,5 @@
 - 版本比较 / compareVersion | src/services/updater.ts::compareVersion | 可用 | 非数字段被忽略，只比较数字位
 - 镜像竞速 / firstSuccessful | src/services/updater.ts::firstSuccessful | 可用 | 首个成功者生效，其余请求不会被取消
 - 唯一 ID | src/utils/id.ts::createId | 可用 | 优先 crypto.randomUUID，降级为时间戳 + 随机串
+- 中止兼容 / throwIfAborted | src/utils/abort.ts::throwIfAborted | 可用 | 兼容缺少 AbortSignal.reason / throwIfAborted 的旧版 WebView；getAbortReason 提供同一处降级
 - 文件体积格式化 | src/services/attachments.ts::formatSize | 可用 | 以 1024 进位，10 以上取整
