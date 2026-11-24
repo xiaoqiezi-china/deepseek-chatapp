@@ -46,6 +46,8 @@ The result is a small download, a short install and a launch that finishes in ab
 - **Replies** — streaming output, reasoning, web search, link reading with citations and read-aloud.
 - **Attachments** — upload, paste or drag images and files; take a photo, crop it, then send; voice input with a live waveform.
 - **Rendering** — Markdown, syntax highlighting, KaTeX and Mermaid.
+- **Models** — DeepSeek official models, or any third-party Chat Completions endpoint with its own key and model ID.
+- **Code** — run Python, JavaScript or CMD snippets from a code block; preview generated HTML and SVG inline.
 - **Account** — sign in with an API key, view balance and available models, change the key.
 - **System prompt** — default identity prompt or a custom one; an empty custom prompt omits the `system` field.
 - **Settings** — Chinese / English, light / dark / follow system, TTS voice, location and model (defaults to `deepseek-flash`).
@@ -83,6 +85,8 @@ All data stays on your machine.
 
 The API key is stored in plaintext in `settings.json`. Do not use the app on a shared device and never commit `data/`.
 
+The web storage service listens on `127.0.0.1:8091` by default and has no authentication. Set `HOST` and `PORT` to change that, but only expose it on a network you trust.
+
 History import and export use ZIP. Exports contain conversations and local image originals; the API key and settings are never exported.
 
 ## Build
@@ -102,7 +106,7 @@ src/                 frontend UI and logic
   services/
     api/             DeepSeek API client, SSE and protocol types
     chat/            sessions, branching, storage adapters and history
-    storage/         storage backend interface
+    storage/         storage request bridge (native IPC / HTTP)
 server/              local storage service for the web build
 src-tauri/           Tauri 2 desktop app
 android/             Capacitor Android project

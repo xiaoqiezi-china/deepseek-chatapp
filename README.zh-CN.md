@@ -48,6 +48,8 @@ Deepseek CE 是基于 DeepSeek 开源 [chat-demo](https://github.com/deepseek-ai
 - **回答能力**：流式输出、深度思考、智能搜索、链接阅读与来源引用、回复朗读。
 - **附件**：上传、粘贴、拖拽图片和文件；拍照后可直接裁剪再发送；语音输入带实时频谱。
 - **渲染**：Markdown、代码高亮、KaTeX 公式、Mermaid 图表。
+- **模型**：使用 DeepSeek 官方模型，或接入任意第三方 Chat Completions 服务（自带地址、模型与密钥）。
+- **代码**：在代码块中直接运行 Python / JavaScript / CMD，并预览生成的 HTML 与 SVG。
 - **账号管理**：输入 API Key 登录，查看账户余额与可用模型，随时更换密钥。
 - **系统提示词**：可选默认身份提示词或自定义内容；自定义留空时不发送 `system` 字段。
 - **设置**：简体中文 / English、浅色 / 深色 / 跟随系统、朗读音色、位置、模型（默认 `deepseek-flash`）。
@@ -85,6 +87,8 @@ Windows 下也可以直接双击 `start.bat` 启动、`stop.bat` 停止。
 
 API Key 以明文保存在 `settings.json` 中。请不要在共享设备上使用，也不要把 `data/` 提交到仓库。
 
+网页版存储服务默认只监听 `127.0.0.1:8091` 且没有鉴权；需要改端口或对外监听时使用 `HOST`、`PORT` 环境变量，且只应在可信网络中使用。
+
 历史导入导出使用 ZIP 格式，导出包含会话与本地图片原件，不包含 API Key 与设置。
 
 ## 构建
@@ -104,7 +108,7 @@ src/                 前端界面与业务逻辑
   services/
     api/             DeepSeek API 请求、SSE 与协议类型
     chat/            会话、消息分支、存储适配与历史导入导出
-    storage/         存储后端接口
+    storage/         存储请求适配（原生 IPC / HTTP）
 server/              本地存储服务（网页版）
 src-tauri/           Tauri 2 桌面端
 android/             Capacitor Android 工程

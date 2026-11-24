@@ -1,5 +1,9 @@
 # 第一步改造实施说明
 
+> **历史记录**：本文是第一步（Web + 本地存储服务）改造时的说明，后续迭代（Tauri 桌面端、Capacitor Android、
+> 第三方模型、代码运行、自动更新、历史归档等）未在此更新。当前架构、存储契约与已知边界见
+> [docs/architecture.md](docs/architecture.md)。
+
 ## 运行
 
 需要 Node 22.12+ 与 pnpm。
@@ -25,12 +29,12 @@ pnpm start
 所有数据由后端写入项目根目录 `data/`：
 
 - `settings.json`：API Key、语言、主题、位置、音色、开关、**系统提示词模式与内容**（明文，仅本机可访问）
-- `summaries.json`：会话摘要索引（含附件引用计数）
+- `summaries.json`：会话摘要索引（含附件 ID 列表，与会话文件不一致时自动重建）
 - `sessions/<id>.json`：会话全文（含所有消息分支）
 - `files/<id>` + `files/<id>.meta.json`：附件原件与 MIME
 - `staging/`：历史导入暂存；commit 时目录级原子换位
 
-浏览器不再使用 localStorage / IndexedDB。存储访问全部经 `/api/*`（见 `server/index.ts`），前端适配在 `src/services/chat/db.ts`。存储接口 `src/services/storage/backend.ts` 为后续 Electron / Capacitor 实现预留了同构位。
+浏览器不再使用 localStorage / IndexedDB。存储访问全部经 `/api/*`（见 `server/index.ts`），前端调用在 `src/services/chat/db.ts`，统一出口是 `src/services/storage/bridge.ts`：存在 `window.__DSH_STORAGE_FETCH__` 时走原生注入（桌面 IPC / Android Filesystem），否则请求 `/api`。
 
 ## 新增功能
 
@@ -43,7 +47,7 @@ pnpm start
 ## 校验
 
 ```sh
-pnpm type    # TypeScript 类型检查（含 server/）
+pnpm type    # TypeScript 类型检查（tsconfig 只包含 src/，server/ 由 lint 覆盖）
 pnpm lint    # oxlint（server/ 单独放宽 curly 与 no-explicit-any）
 pnpm build   # rspack 生产构建（跨平台，不用 rm -rf）
 ```
@@ -52,6 +56,6 @@ pnpm build   # rspack 生产构建（跨平台，不用 rm -rf）
 
 ## 已知边界
 
-- `data/settings.json` 明文保存 API Key，后端监听 0.0.0.0:8091 且无鉴权——仅适合本机单机使用，不要暴露到公网。
-- 三端打包（Electron 桌面端 / Capacitor Android APK）为后续阶段，本步只做架构预留。
+- `data/settings.json` 明文保存 API Key，存储服务无鉴权；现默认只监听 127.0.0.1:8091，需要对外监听时用 `HOST` 显式放开，且不要暴露到公网。
+- 桌面端与 Android 端已在后续阶段完成（Tauri 2 / Capacitor），不使用 `server/`，直接读写应用数据目录中的同一份结构。
 - 旧浏览器里的 localStorage/IndexedDB 历史数据不做自动迁移；可用原应用的 ZIP 导出/导入过渡。
