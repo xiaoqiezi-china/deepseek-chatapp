@@ -62,7 +62,7 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     }
   }
 
-  const deleteTempQuietly = async (path: string): Promise<void> => {
+  const deleteFileQuietly = async (path: string): Promise<void> => {
     try {
       await fs.deleteFile({ path, directory: DIR })
     } catch {
@@ -74,9 +74,19 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     const prefix = id + '.json.tmp-'
     for (const name of await listAll(pathOf('/sessions'))) {
       if (name.startsWith(prefix)) {
-        await deleteTempQuietly(pathOf('/sessions/' + name))
+        await deleteFileQuietly(pathOf('/sessions/' + name))
       }
     }
+  }
+
+  /** 清空并重建目录；目录不存在时忽略。 */
+  const resetDir = async (dir: string): Promise<void> => {
+    try {
+      await fs.rmdir({ path: dir, directory: DIR, recursive: true })
+    } catch {
+      // 目录不存在时忽略
+    }
+    await fs.mkdir({ path: dir, directory: DIR, recursive: true })
   }
 
   const promoteTemp = async (temp: string, target: string): Promise<void> => {
@@ -101,7 +111,7 @@ if (win?.Capacitor?.isNativePlatform?.()) {
       if (Array.isArray(tempValue) && !Array.isArray(targetValue)) {
         await promoteTemp(temp, target)
       } else {
-        await deleteTempQuietly(temp)
+        await deleteFileQuietly(temp)
       }
     }
 
@@ -113,7 +123,7 @@ if (win?.Capacitor?.isNativePlatform?.()) {
       }
       const targetName = name.slice(0, match.index ?? 0)
       if (!targetName.endsWith('.json')) {
-        await deleteTempQuietly(pathOf('/sessions/' + name))
+        await deleteFileQuietly(pathOf('/sessions/' + name))
         continue
       }
       const id = targetName.slice(0, -5)
@@ -124,12 +134,12 @@ if (win?.Capacitor?.isNativePlatform?.()) {
       const isSession = (value: unknown): value is Json =>
         isRecord(value) && asString(value.id) === id && Array.isArray(value.messages)
       if (!isSession(tempValue)) {
-        await deleteTempQuietly(temp)
+        await deleteFileQuietly(temp)
         continue
       }
       if (isSession(targetValue)) {
         // 目标文件仍然完整时以目标为准；temp 可能只是上一次重命名失败留下的旧快照。
-        await deleteTempQuietly(temp)
+        await deleteFileQuietly(temp)
       } else {
         await promoteTemp(temp, target)
       }
@@ -388,9 +398,9 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     }
 
     if (path === '/staging/clear' && method === 'POST') {
-      for (const dir of [pathOf('/staging/sessions'), pathOf('/staging/files')]) {
-        await fs.mkdir({ path: dir, directory: DIR, recursive: true })
-      }
+      // 上一次导入残留的暂存会在 commit 时被当成新归档写入，必须真正删除内容。
+      await resetDir(pathOf('/staging/sessions'))
+      await resetDir(pathOf('/staging/files'))
       return respond(200, { ok: true })
     }
 
@@ -407,23 +417,92 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     }
 
     if (path === '/staging/file-types' && method === 'POST') {
+      // 图片 MIME 由原件字节推断，导入时统一回填到暂存会话，与桌面端、网页端保持同一份数据。
+      const types = jsonBody()
+      for (const name of await listJson(pathOf('/staging/sessions'))) {
+        const session = await readJson(pathOf('/staging/sessions/' + name))
+        if (!isRecord(session) || !Array.isArray(session.messages)) {
+          continue
+        }
+        let changed = false
+        for (const message of session.messages) {
+          if (!isRecord(message) || message.role !== 'user' || !Array.isArray(message.files)) {
+            continue
+          }
+          for (const file of message.files) {
+            if (!isRecord(file)) {
+              continue
+            }
+            const type = asString(types[asString(file.id)])
+            if (asString(file.mimeType) !== type) {
+              file.mimeType = type
+              changed = true
+            }
+          }
+        }
+        if (changed) {
+          await writeJson(pathOf('/staging/sessions/' + name), session)
+        }
+      }
       return respond(200, { ok: true })
     }
 
     if (path === '/staging/commit' && method === 'POST') {
+      // 暂存即全量：正式目录按归档整体替换，删除归档之外的会话与原件，
+      // 否则「清空全部历史」与「导入历史」都会因为索引自愈而退回替换前的状态。
+      let moveFailed = false
       const summaries = await withSummaries(async () => {
-        const names = await listJson(pathOf('/staging/sessions'))
+        const stagedNames = (await listAll(pathOf('/staging/sessions'))).filter((name) =>
+          name.endsWith('.json')
+        )
+        const stagedIds = new Set(stagedNames.map((name) => name.slice(0, -5)))
+        for (const name of await listJson(pathOf('/sessions'))) {
+          const id = name.slice(0, -5)
+          if (stagedIds.has(id)) {
+            continue
+          }
+          await deleteFileQuietly(pathOf('/sessions/' + name))
+          await deleteSessionTemps(id)
+        }
         const out: Json[] = []
-        for (const name of names) {
+        for (const name of stagedNames) {
           const staged = await readJson(pathOf('/staging/sessions/' + name))
           if (isRecord(staged)) {
             await writeJson(pathOf('/sessions/' + name), staged)
             out.push(summaryOf(staged))
           }
         }
+        const stagedFiles = (await listAll(pathOf('/staging/files'))).filter(
+          (name) => !tempSuffixPattern.test(name)
+        )
+        // rename 不会创建父目录，正式目录必须先存在（全新安装后首次导入时可能还没有）。
+        await fs.mkdir({ path: pathOf('/files'), directory: DIR, recursive: true })
+        const kept = new Set(stagedFiles)
+        for (const name of await listAll(pathOf('/files'))) {
+          if (!kept.has(name)) {
+            await deleteFileQuietly(pathOf('/files/' + name))
+          }
+        }
+        // 原件直接改名搬运，不经过 JS 字符串，避免大图占用内存；失败时保留暂存副本。
+        for (const name of stagedFiles) {
+          try {
+            await fs.rename({
+              from: pathOf('/staging/files/' + name),
+              to: pathOf('/files/' + name),
+              directory: DIR,
+              toDirectory: DIR,
+            })
+          } catch {
+            moveFailed = true
+          }
+        }
         await writeJson(pathOf('/summaries.json'), out)
         return out
       })
+      await resetDir(pathOf('/staging/sessions'))
+      if (!moveFailed) {
+        await resetDir(pathOf('/staging/files'))
+      }
       return respond(200, summaries.map(publicSummary))
     }
 
@@ -433,7 +512,10 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     }
 
     if (path === '/history/clear' && method === 'POST') {
+      // 只清索引会被下一次列表请求的重建逻辑还原，会话文件也必须删除。
       await withSummaries(async () => {
+        await resetDir(pathOf('/sessions'))
+        await resetDir(pathOf('/files'))
         await writeJson(pathOf('/summaries.json'), [])
       })
       return respond(200, { ok: true })

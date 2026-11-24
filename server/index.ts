@@ -9,6 +9,8 @@ import { checkRuntime, runCode, type RunLanguage } from './codeRunner.js'
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const DIST_DIR = path.join(root, 'dist')
 const PORT = Number(process.env.PORT ?? 8091)
+/** 默认只监听回环地址：本地服务无鉴权，不应被局域网其他设备直接访问。 */
+const HOST = process.env.HOST ?? '127.0.0.1'
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -158,10 +160,19 @@ async function proxyThirdParty(req: http.IncomingMessage, res: http.ServerRespon
   }
 }
 
-const corsHeaders: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,PUT,PATCH,POST,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+/** 只对回环来源放开跨域，避免任意网页读写本机数据。 */
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+
+const corsHeaders = (origin: string | undefined): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Methods': 'GET,PUT,PATCH,POST,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  }
+  if (origin && LOOPBACK_ORIGIN.test(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin
+    headers.Vary = 'Origin'
+  }
+  return headers
 }
 
 const isRunLanguage = (value: unknown): value is RunLanguage =>
@@ -313,7 +324,7 @@ await store.initStore()
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost')
-  Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v))
+  Object.entries(corsHeaders(req.headers.origin)).forEach(([k, v]) => res.setHeader(k, v))
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
   if (url.pathname.startsWith('/api/')) {
     void handleApi(req, res, url)
@@ -322,7 +333,10 @@ const server = http.createServer((req, res) => {
   }
 })
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log('chat-demo server listening on http://localhost:' + PORT)
+server.listen(PORT, HOST, () => {
+  console.log('chat-demo server listening on http://' + HOST + ':' + PORT)
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+    console.warn('warning: the storage API has no authentication; only use a non-loopback HOST on a trusted network')
+  }
   console.log('data dir:', store.DATA_DIR)
 })

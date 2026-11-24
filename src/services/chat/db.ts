@@ -74,12 +74,6 @@ const putFile = async (path: string, file: StoredFile): Promise<void> => {
   if (!response.ok) { throw new Error('save file failed: ' + response.status) }
 }
 
-export const saveFiles = async (files: StoredFile[]): Promise<void> => {
-  for (const file of files) {
-    await putFile('/files/' + encodeURIComponent(file.id), file)
-  }
-}
-
 export const loadFile = async (id: string): Promise<Blob | undefined> => {
   const response = await storageFetch('/files/' + encodeURIComponent(id))
   if (response.status === 404) { return undefined }

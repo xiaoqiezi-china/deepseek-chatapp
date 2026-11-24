@@ -300,7 +300,11 @@ fn storage_request(app: tauri::AppHandle, method: String, path: String, body: Op
       });
     }
     if method == "PUT" {
-      let bytes = body.as_deref().map(|b| b.as_bytes().to_vec()).unwrap_or_default();
+      // 前端把 Blob 转成 base64 再经 IPC 传过来，这里必须解码后再落盘。
+      let bytes = match body.as_deref() {
+        Some(text) => base64_decode(text)?,
+        None => Vec::new(),
+      };
       fs::write(&file, bytes).map_err(|e| e.to_string())?;
       write_json(&dir.join("files").join(format!("{}.meta.json", id)), &json!({"contentType": content_type.unwrap_or_else(|| "application/octet-stream".into())}))?;
       return Ok(resp(200, json!({"ok": true})));
@@ -323,12 +327,54 @@ fn storage_request(app: tauri::AppHandle, method: String, path: String, body: Op
   }
   if parts.first() == Some(&"staging") && parts.get(1) == Some(&"files") && parts.len() == 3 && method == "PUT" {
     let id = safe_id(parts[2])?;
-    let bytes = body.as_deref().map(|b| b.as_bytes().to_vec()).unwrap_or_default();
+    let bytes = match body.as_deref() {
+      Some(text) => base64_decode(text)?,
+      None => Vec::new(),
+    };
     fs::write(dir.join("staging/files").join(id), bytes).map_err(|e| e.to_string())?;
+    // commit 会把整个暂存目录换位到 files/，媒体类型跟着原件一起搬运。
+    write_json(
+      &dir.join("staging/files").join(format!("{}.meta.json", id)),
+      &json!({"contentType": content_type.unwrap_or_else(|| "application/octet-stream".into())}),
+    )?;
     return Ok(resp(200, json!({"ok": true})));
   }
   if path == "/staging/file-types" && method == "POST" {
-    // 图片 MIME 回填：暂不修改会话 JSON（导入的图片内容本身已带类型，界面展示不受影响）
+    // 图片 MIME 由原件字节推断，导入时回填到暂存会话，三端数据保持一致。
+    let types = parse_body();
+    if let Ok(entries) = fs::read_dir(dir.join("staging/sessions")) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+          continue;
+        }
+        let mut session = match read_json(&path) {
+          Some(value) => value,
+          None => continue,
+        };
+        let mut changed = false;
+        if let Some(messages) = session.get_mut("messages").and_then(|m| m.as_array_mut()) {
+          for message in messages.iter_mut() {
+            if message.get("role").and_then(|v| v.as_str()) != Some("user") {
+              continue;
+            }
+            if let Some(files) = message.get_mut("files").and_then(|f| f.as_array_mut()) {
+              for file in files.iter_mut() {
+                let id = file.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let mime = types.get(&id).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                if file.get("mimeType").and_then(|v| v.as_str()).unwrap_or("") != mime {
+                  file["mimeType"] = json!(mime);
+                  changed = true;
+                }
+              }
+            }
+          }
+        }
+        if changed {
+          write_json(&path, &session)?;
+        }
+      }
+    }
     return Ok(resp(200, json!({"ok": true})));
   }
   if path == "/staging/commit" && method == "POST" {
