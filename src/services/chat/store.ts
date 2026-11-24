@@ -110,6 +110,9 @@ const sameSummary = (a: SessionSummary, b: SessionSummary) =>
 
 const sessionAccess = new Map<string, number>()
 const unsavedSessions = new Set<string>()
+/** 同一会话只允许一个保存请求在飞；期间的新变化合并到下一次保存。 */
+const savingSessions = new Set<string>()
+const saveAgain = new Set<string>()
 /** 保存失败时保留原件，重试成功后才释放。 */
 const pendingFiles = new Map<string, db.StoredFile[]>()
 const deletingSessions = new Set<string>()
@@ -247,40 +250,68 @@ const updateReply = (sessionId: string, reply: AssistantMessage) =>
 
 const persist = (sessionId: string) => {
   const session = getSession(sessionId)
-  if (session) {
-    unsavedSessions.add(sessionId)
-    if (deletingSessions.has(sessionId)) {
+  if (!session) {
+    return
+  }
+  unsavedSessions.add(sessionId)
+  if (deletingSessions.has(sessionId)) {
+    return
+  }
+  if (savingSessions.has(sessionId)) {
+    // 已有保存在飞，标记为需要再存一次；完成后会用最新快照补写。
+    saveAgain.add(sessionId)
+    return
+  }
+  void saveSessionSnapshot(sessionId)
+}
+
+const saveSessionSnapshot = async (sessionId: string) => {
+  const session = getSession(sessionId)
+  if (!session) {
+    unsavedSessions.delete(sessionId)
+    return
+  }
+  savingSessions.add(sessionId)
+  const epoch = historyEpoch
+  const files = pendingFiles.get(sessionId)
+  let succeeded = false
+  try {
+    await db.saveSession(session, files)
+    succeeded = true
+    if (epoch !== historyEpoch || !getSession(sessionId)) {
       return
     }
-    const epoch = historyEpoch
-    const files = pendingFiles.get(sessionId)
-    void db
-      .saveSession(session, files)
-      .then(() => {
-        if (epoch !== historyEpoch || !getSession(sessionId)) {
-          return
-        }
-        if (pendingFiles.get(sessionId) === files) {
-          pendingFiles.delete(sessionId)
-        }
-        if (getSession(sessionId) === session) {
-          unsavedSessions.delete(sessionId)
-          set((state) => ({
-            sessionSaveErrors: Object.fromEntries(
-              Object.entries(state.sessionSaveErrors).filter(([id]) => id !== sessionId)
-            ),
-          }))
-          trimSessionCache()
-        }
-      })
-      .catch((error: unknown) => {
-        db.reportStorageError('save session')(error)
-        if (epoch === historyEpoch && getSession(sessionId)) {
-          set((state) => ({
-            sessionSaveErrors: { ...state.sessionSaveErrors, [sessionId]: true },
-          }))
-        }
-      })
+    if (pendingFiles.get(sessionId) === files) {
+      pendingFiles.delete(sessionId)
+    }
+    if (getSession(sessionId) === session) {
+      unsavedSessions.delete(sessionId)
+      set((state) => ({
+        sessionSaveErrors: Object.fromEntries(
+          Object.entries(state.sessionSaveErrors).filter(([id]) => id !== sessionId)
+        ),
+      }))
+      trimSessionCache()
+    }
+  } catch (error) {
+    db.reportStorageError('save session')(error)
+    if (epoch === historyEpoch && getSession(sessionId)) {
+      set((state) => ({
+        sessionSaveErrors: { ...state.sessionSaveErrors, [sessionId]: true },
+      }))
+    }
+  } finally {
+    savingSessions.delete(sessionId)
+    const again = saveAgain.delete(sessionId)
+    if (
+      succeeded &&
+      again &&
+      epoch === historyEpoch &&
+      unsavedSessions.has(sessionId) &&
+      !deletingSessions.has(sessionId)
+    ) {
+      persist(sessionId)
+    }
   }
 }
 
@@ -292,6 +323,8 @@ export const retrySaveSessions = () => {
 
 /** 离开前先合并尚未绘制的增量；隐藏期间浏览器可能暂停动画帧。 */
 export const bindChatPersistence = () => {
+  let disposed = false
+  let removeAppListener: (() => void) | undefined
   const save = () => {
     if (get().importingHistory) {
       return
@@ -313,9 +346,39 @@ export const bindChatPersistence = () => {
   }
   document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('pagehide', save)
+
+  // Android WebView 进入后台时 visibilitychange 不一定触发，补充原生 appStateChange。
+  const cap = (
+    window as Window & {
+      Capacitor?: { isNativePlatform?: () => boolean }
+    }
+  ).Capacitor
+  if (cap?.isNativePlatform?.()) {
+    void import('@capacitor/app')
+      .then(async ({ App: CapacitorApp }) => {
+        const listener = await CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+          if (!isActive) {
+            save()
+          }
+        })
+        if (disposed) {
+          void listener.remove()
+        } else {
+          removeAppListener = () => {
+            void listener.remove()
+          }
+        }
+      })
+      .catch(() => {
+        // 原生插件不可用时仍有 visibilitychange/pagehide 兜底
+      })
+  }
+
   return () => {
+    disposed = true
     document.removeEventListener('visibilitychange', onVisibilityChange)
     window.removeEventListener('pagehide', save)
+    removeAppListener?.()
   }
 }
 
@@ -481,6 +544,8 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
     }
     sessionAccess.clear()
     unsavedSessions.clear()
+    savingSessions.clear()
+    saveAgain.clear()
     pendingFiles.clear()
     clearAllDrafts()
     const replaced = Object.values(get().sessionCache)
@@ -603,6 +668,8 @@ const removeSessionData = async (id: string): Promise<boolean> => {
     sessionLoads.delete(id)
     sessionAccess.delete(id)
     unsavedSessions.delete(id)
+    savingSessions.delete(id)
+    saveAgain.delete(id)
     pendingFiles.delete(id)
     clearDraft(id)
     const removed = getSession(id)

@@ -7,8 +7,8 @@ android {
         applicationId "com.deepseek.chatapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 18
-        versionName "1.1.6"
+        versionCode 19
+        versionName "1.1.7"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -17,6 +17,11 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // 独立包名，调试版数据目录与正式版隔离，避免测试污染真实会话
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
         release {
             // 社区版直接用 debug 签名，方便本地安装测试
             signingConfig signingConfigs.debug

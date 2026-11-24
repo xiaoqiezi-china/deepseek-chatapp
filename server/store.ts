@@ -66,12 +66,54 @@ async function readSummaries(): Promise<Summary[]> {
   return Array.isArray(value) ? value : []
 }
 
+/** 摘要索引是多个保存请求共同修改的单文件，读改写必须串行。 */
+let summariesQueue: Promise<void> = Promise.resolve()
+const withSummariesLock = <T>(task: () => Promise<T>): Promise<T> => {
+  const run = summariesQueue.then(task, task)
+  summariesQueue = run.then(() => undefined, () => undefined)
+  return run
+}
+
+const readSummariesForUpdate = async (): Promise<Summary[]> => {
+  if (await summariesNeedRebuild()) {
+    // 索引损坏或缺少条目时以会话文件为准重建，不能把空数组当成真实状态。
+    return rebuildSummaries()
+  }
+  return readSummaries()
+}
+
+/** 索引与会话文件不一致时才重建，正常情况下只列目录、比对 ID。 */
+async function summariesNeedRebuild(): Promise<boolean> {
+  let stored: Summary[] | undefined
+  try {
+    stored = await readJson<Summary[]>(SUMMARIES_FILE)
+  } catch {
+    return true
+  }
+  if (!Array.isArray(stored)) return true
+  const names = (await fsp.readdir(SESSIONS_DIR).catch(() => []))
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => name.slice(0, -5))
+  const storedIds: string[] = []
+  for (const summary of stored) {
+    const id = typeof summary?.id === 'string' ? summary.id : ''
+    if (!id) return true
+    storedIds.push(id)
+  }
+  const uniqueStored = new Set(storedIds)
+  if (uniqueStored.size !== storedIds.length || storedIds.length !== names.length) {
+    return true
+  }
+  return names.some((id) => !uniqueStored.has(id))
+}
+
 /** 从会话文件重建摘要索引（索引缺失时自动调用）。 */
 async function rebuildSummaries(dir = SESSIONS_DIR): Promise<Summary[]> {
   const summaries: Summary[] = []
   for (const name of await fsp.readdir(dir).catch(() => [])) {
     if (!name.endsWith('.json')) continue
-    const session = await readJson<any>(path.join(dir, name))
+    // 旧版本或异常中断可能留下半个会话 JSON；跳过它，不能让整个启动/列表失败。
+    const session = await readJson<any>(path.join(dir, name)).catch(() => undefined)
     if (!session?.id) continue
     const fileIds = [
       ...new Set<string>(
@@ -106,7 +148,7 @@ export async function initStore(): Promise<void> {
   await fsp.mkdir(SESSIONS_DIR, { recursive: true })
   await fsp.mkdir(FILES_DIR, { recursive: true })
   await fsp.mkdir(STAGING_DIR, { recursive: true })
-  if (!(await exists(SUMMARIES_FILE))) await rebuildSummaries()
+  if (await summariesNeedRebuild()) await rebuildSummaries()
 
   // 清理遗留的 trash 目录与临时文件
   for (const base of [DATA_DIR, STAGING_DIR]) {
@@ -140,7 +182,7 @@ export async function saveSettings(settings: Record<string, unknown>): Promise<v
 
 // ---- 会话 ----
 export async function loadSessionSummaries() {
-  const summaries = await readSummaries()
+  const summaries = await withSummariesLock(readSummariesForUpdate)
   return summaries.map((s) => ({
     id: s.id,
     title: s.title,
@@ -162,19 +204,21 @@ export async function saveSession(session: any, files: { id: string; blob: Buffe
   }
   const id = safeId(session.id)
   await saveJson(path.join(SESSIONS_DIR, id + '.json'), session)
-  const summaries = await readSummaries()
-  const summary: Summary = {
-    id,
-    title: session.title ?? '',
-    createdAt: session.createdAt ?? 0,
-    updatedAt: session.updatedAt ?? 0,
-    pinned: session.pinned === true,
-    fileIds: fileIdsOf(session),
-  }
-  const index = summaries.findIndex((s) => s.id === id)
-  if (index >= 0) summaries[index] = summary
-  else summaries.push(summary)
-  await saveJson(SUMMARIES_FILE, summaries)
+  await withSummariesLock(async () => {
+    const summaries = await readSummariesForUpdate()
+    const summary: Summary = {
+      id,
+      title: session.title ?? '',
+      createdAt: session.createdAt ?? 0,
+      updatedAt: session.updatedAt ?? 0,
+      pinned: session.pinned === true,
+      fileIds: fileIdsOf(session),
+    }
+    const index = summaries.findIndex((s) => s.id === id)
+    if (index >= 0) summaries[index] = summary
+    else summaries.push(summary)
+    await saveJson(SUMMARIES_FILE, summaries)
+  })
 }
 
 export async function renameSession(id: string, title: string) {
@@ -183,23 +227,30 @@ export async function renameSession(id: string, title: string) {
   if (!session) return
   session.title = title
   await saveJson(path.join(SESSIONS_DIR, id + '.json'), session)
-  const summaries = await readSummaries()
-  const index = summaries.findIndex((s) => s.id === id)
-  if (index >= 0) {
-    summaries[index].title = title
-    await saveJson(SUMMARIES_FILE, summaries)
-  }
+  await withSummariesLock(async () => {
+    const summaries = await readSummariesForUpdate()
+    const index = summaries.findIndex((s) => s.id === id)
+    if (index >= 0) {
+      summaries[index].title = title
+      await saveJson(SUMMARIES_FILE, summaries)
+    }
+  })
 }
 
 export async function deleteSession(id: string) {
   safeId(id)
-  const summaries = await readSummaries()
-  const summary = summaries.find((s) => s.id === id)
-  await fsp.unlink(path.join(SESSIONS_DIR, id + '.json')).catch(() => {})
-  const remaining = summaries.filter((s) => s.id !== id)
-  await saveJson(SUMMARIES_FILE, remaining)
+  let remaining: Summary[] = []
+  let removedFiles: string[] = []
+  await withSummariesLock(async () => {
+    const summaries = await readSummariesForUpdate()
+    const summary = summaries.find((s) => s.id === id)
+    removedFiles = summary?.fileIds ?? []
+    await fsp.unlink(path.join(SESSIONS_DIR, id + '.json')).catch(() => {})
+    remaining = summaries.filter((s) => s.id !== id)
+    await saveJson(SUMMARIES_FILE, remaining)
+  })
   const stillUsed = new Set(remaining.flatMap((s) => s.fileIds))
-  for (const fileId of summary?.fileIds ?? []) {
+  for (const fileId of removedFiles) {
     if (!stillUsed.has(fileId)) {
       await fsp.unlink(path.join(FILES_DIR, fileId)).catch(() => {})
       await fsp.unlink(path.join(FILES_DIR, fileId + '.meta.json')).catch(() => {})

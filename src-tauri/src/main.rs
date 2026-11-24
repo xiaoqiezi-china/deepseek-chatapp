@@ -3,8 +3,10 @@
 
 use serde_json::{json, Value};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::Manager;
@@ -32,11 +34,31 @@ fn read_json(path: &Path) -> Option<Value> {
   serde_json::from_str(&text).ok()
 }
 
+/// 摘要索引的读改写必须串行；会话正文各自独立写入，不占用这把锁。
+static SUMMARIES_LOCK: Mutex<()> = Mutex::new(());
+static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
+static INIT_CHECKED: OnceLock<()> = OnceLock::new();
+
 fn write_json(path: &Path, value: &Value) -> Result<(), String> {
-  if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
-  let tmp = path.with_extension("tmp");
-  fs::write(&tmp, serde_json::to_string_pretty(value).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-  fs::rename(&tmp, path).map_err(|e| e.to_string())
+  if let Some(parent) = path.parent() {
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+  }
+  let text = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
+  let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("data.json");
+  // 唯一临时文件：并发保存不会共用同一个 .tmp，避免写坏已落盘的文件。
+  let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
+  let tmp = path.with_file_name(format!(".{name}.tmp-{}-{seq}", std::process::id()));
+  let result = (|| -> Result<(), String> {
+    let mut file = fs::File::create(&tmp).map_err(|e| e.to_string())?;
+    file.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())?;
+    drop(file);
+    fs::rename(&tmp, path).map_err(|e| e.to_string())
+  })();
+  if result.is_err() {
+    let _ = fs::remove_file(&tmp);
+  }
+  result
 }
 
 fn file_ids(session: &Value) -> Vec<String> {
@@ -69,13 +91,41 @@ fn summary_of(s: &Value) -> Value {
   })
 }
 
-fn read_summaries(dir: &Path) -> Vec<Value> {
-  read_json(&dir.join("summaries.json"))
-    .and_then(|v| v.as_array().cloned())
-    .unwrap_or_default()
+fn read_summaries_file(dir: &Path) -> Option<Vec<Value>> {
+  read_json(&dir.join("summaries.json")).and_then(|v| v.as_array().cloned())
 }
 
-fn rebuild_summaries(dir: &Path) -> Vec<Value> {
+fn session_ids(dir: &Path) -> Vec<String> {
+  let mut ids = Vec::new();
+  if let Ok(entries) = fs::read_dir(dir.join("sessions")) {
+    for entry in entries.flatten() {
+      let path = entry.path();
+      if path.extension().and_then(|s| s.to_str()) != Some("json") {
+        continue;
+      }
+      if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
+        ids.push(id.to_string());
+      }
+    }
+  }
+  ids
+}
+
+fn summaries_consistent(stored: &[Value], ids: &[String]) -> bool {
+  let mut stored_ids = Vec::new();
+  for summary in stored {
+    match summary.get("id").and_then(|v| v.as_str()) {
+      Some(id) => stored_ids.push(id.to_string()),
+      None => return false,
+    }
+  }
+  stored_ids.sort();
+  let mut disk_ids = ids.to_vec();
+  disk_ids.sort();
+  stored_ids == disk_ids
+}
+
+fn rebuild_summaries_unlocked(dir: &Path) -> Vec<Value> {
   let mut out = Vec::new();
   if let Ok(entries) = fs::read_dir(dir.join("sessions")) {
     for e in entries.flatten() {
@@ -88,11 +138,53 @@ fn rebuild_summaries(dir: &Path) -> Vec<Value> {
   out
 }
 
+fn rebuild_summaries(dir: &Path) -> Vec<Value> {
+  let _guard = SUMMARIES_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+  rebuild_summaries_unlocked(dir)
+}
+
+fn read_summaries_unlocked(dir: &Path) -> Vec<Value> {
+  match read_summaries_file(dir) {
+    Some(value) => value,
+    // 索引损坏时按会话文件重建，不能把空数组当成真实状态。
+    None => rebuild_summaries_unlocked(dir),
+  }
+}
+
+fn read_summaries(dir: &Path) -> Vec<Value> {
+  let _guard = SUMMARIES_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+  read_summaries_unlocked(dir)
+}
+
+fn update_summaries<F>(dir: &Path, update: F) -> Result<(), String>
+where
+  F: FnOnce(&mut Vec<Value>) -> Result<(), String>,
+{
+  let _guard = SUMMARIES_LOCK
+    .lock()
+    .map_err(|_| "summaries lock poisoned".to_string())?;
+  let mut summaries = read_summaries_unlocked(dir);
+  update(&mut summaries)?;
+  write_json(&dir.join("summaries.json"), &Value::Array(summaries))
+}
+
+/// 仅当索引与会话文件不一致时才重建；正常情况下只读目录名和索引 ID。
+fn ensure_summaries(dir: &Path) {
+  let _guard = SUMMARIES_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+  let ids = session_ids(dir);
+  match read_summaries_file(dir) {
+    Some(stored) if summaries_consistent(&stored, &ids) => {}
+    _ => {
+      let _ = rebuild_summaries_unlocked(dir);
+    }
+  }
+}
+
 fn init(dir: &Path) {
   for sub in ["sessions", "files", "staging/sessions", "staging/files"] {
     let _ = fs::create_dir_all(dir.join(sub));
   }
-  if !dir.join("summaries.json").exists() { rebuild_summaries(dir); }
+  INIT_CHECKED.get_or_init(|| ensure_summaries(dir));
 }
 
 fn resp(status: u16, body: Value) -> Value {
@@ -131,17 +223,19 @@ fn storage_request(app: tauri::AppHandle, method: String, path: String, body: Op
     if method == "PUT" {
       let session = parse_body();
       write_json(&file, &session)?;
-      let mut sums = read_summaries(&dir);
-      sums.retain(|s| s.get("id").and_then(|v| v.as_str()) != Some(id));
-      sums.push(summary_of(&session));
-      write_json(&dir.join("summaries.json"), &Value::Array(sums))?;
+      update_summaries(&dir, |sums| {
+        sums.retain(|s| s.get("id").and_then(|v| v.as_str()) != Some(id));
+        sums.push(summary_of(&session));
+        Ok(())
+      })?;
       return Ok(resp(200, json!({"ok": true})));
     }
     if method == "DELETE" {
       let _ = fs::remove_file(&file);
-      let mut sums = read_summaries(&dir);
-      sums.retain(|s| s.get("id").and_then(|v| v.as_str()) != Some(id));
-      write_json(&dir.join("summaries.json"), &Value::Array(sums))?;
+      update_summaries(&dir, |sums| {
+        sums.retain(|s| s.get("id").and_then(|v| v.as_str()) != Some(id));
+        Ok(())
+      })?;
       return Ok(resp(200, json!({"ok": true})));
     }
   }
@@ -152,9 +246,14 @@ fn storage_request(app: tauri::AppHandle, method: String, path: String, body: Op
       let title = parse_body().get("title").cloned().unwrap_or(json!(""));
       session["title"] = title.clone();
       write_json(&file, &session)?;
-      let mut sums = read_summaries(&dir);
-      for s in &mut sums { if s.get("id").and_then(|v| v.as_str()) == Some(id) { s["title"] = title.clone(); } }
-      write_json(&dir.join("summaries.json"), &Value::Array(sums))?;
+      update_summaries(&dir, |sums| {
+        for s in sums {
+          if s.get("id").and_then(|v| v.as_str()) == Some(id) {
+            s["title"] = title.clone();
+          }
+        }
+        Ok(())
+      })?;
     }
     return Ok(resp(200, json!({"ok": true})));
   }
@@ -177,10 +276,11 @@ fn storage_request(app: tauri::AppHandle, method: String, path: String, body: Op
       let sid = session.get("id").and_then(|v| v.as_str()).unwrap_or("");
       let id = safe_id(sid)?;
       write_json(&dir.join("sessions").join(format!("{}.json", id)), session)?;
-      let mut sums = read_summaries(&dir);
-      sums.retain(|s| s.get("id").and_then(|v| v.as_str()) != Some(id));
-      sums.push(summary_of(session));
-      write_json(&dir.join("summaries.json"), &Value::Array(sums))?;
+      update_summaries(&dir, |sums| {
+        sums.retain(|s| s.get("id").and_then(|v| v.as_str()) != Some(id));
+        sums.push(summary_of(&session));
+        Ok(())
+      })?;
     }
     return Ok(resp(200, json!({"ok": true})));
   }
@@ -264,6 +364,9 @@ fn storage_request(app: tauri::AppHandle, method: String, path: String, body: Op
     let _ = fs::remove_dir_all(dir.join("files"));
     let _ = fs::create_dir_all(dir.join("sessions"));
     let _ = fs::create_dir_all(dir.join("files"));
+    let _guard = SUMMARIES_LOCK
+      .lock()
+      .map_err(|_| "summaries lock poisoned".to_string())?;
     write_json(&dir.join("summaries.json"), &json!([]))?;
     return Ok(resp(200, json!({"ok": true})));
   }
@@ -913,6 +1016,82 @@ mod tests {
     let mut response = String::new();
     stream.read_to_string(&mut response).expect("read");
     response
+  }
+
+  #[test]
+  fn storage_index_recovers_and_updates_are_serialized() {
+    let dir = std::env::temp_dir().join(format!(
+      "dsh-storage-test-{}-{}",
+      std::process::id(),
+      TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join("sessions")).expect("sessions dir");
+    let summary_path = dir.join("summaries.json");
+
+    // 30 个会话文件，索引先写成空数组；并发更新必须全部保留。
+    for i in 0..30 {
+      let id = format!("session-{i:02}");
+      write_json(
+        &dir.join("sessions").join(format!("{id}.json")),
+        &json!({"id": id, "title": format!("会话 {i}"), "createdAt": i, "updatedAt": i, "messages": []}),
+      )
+      .expect("session");
+    }
+    write_json(&summary_path, &json!([])).expect("empty summaries");
+
+    let handles: Vec<_> = (0..30)
+      .map(|i| {
+        let dir = dir.clone();
+        std::thread::spawn(move || {
+          let id = format!("session-{i:02}");
+          update_summaries(&dir, |sums| {
+            sums.retain(|s| s.get("id").and_then(|v| v.as_str()) != Some(id.as_str()));
+            sums.push(json!({"id": id, "title": format!("会话 {i}"), "createdAt": i, "updatedAt": i, "fileIds": []}));
+            Ok(())
+          })
+          .expect("update summaries");
+        })
+      })
+      .collect();
+    for handle in handles {
+      handle.join().expect("join update");
+    }
+    let summaries = read_summaries(&dir);
+    assert_eq!(summaries.len(), 30);
+    assert_eq!(
+      summaries.iter().filter(|s| s.get("id").and_then(|v| v.as_str()).is_some()).count(),
+      30
+    );
+
+    // 索引只剩 5 条、索引损坏时，都应从会话文件自愈。
+    write_json(&summary_path, &Value::Array(summaries[..5].to_vec())).expect("stale summaries");
+    ensure_summaries(&dir);
+    assert_eq!(read_summaries(&dir).len(), 30);
+    fs::write(&summary_path, "{\"broken\":").expect("broken summaries");
+    assert_eq!(read_summaries(&dir).len(), 30);
+
+    // 半个会话 JSON 不能拖垮自愈。
+    fs::write(dir.join("sessions").join("broken.json"), "{\"id\":\"broken\"").expect("broken session");
+    ensure_summaries(&dir);
+    assert_eq!(read_summaries(&dir).len(), 30);
+
+    // 并发写同一个文件不能共用临时文件写坏结果。
+    let race_path = dir.join("race.json");
+    let race_handles: Vec<_> = (0..8)
+      .map(|i| {
+        let path = race_path.clone();
+        std::thread::spawn(move || {
+          write_json(&path, &json!({"thread": i, "text": "x".repeat(2000)})).expect("race write");
+        })
+      })
+      .collect();
+    for handle in race_handles {
+      handle.join().expect("join race");
+    }
+    assert!(read_json(&race_path).is_some());
+
+    let _ = fs::remove_dir_all(&dir);
   }
 
   #[test]

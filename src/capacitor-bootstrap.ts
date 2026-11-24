@@ -32,23 +32,118 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     }
   }
 
-  const writeJson = async (path: string, value: unknown): Promise<void> => {
-    await fs.writeFile({
-      path,
-      directory: DIR,
-      data: JSON.stringify(value),
-      encoding: Encoding.UTF8,
-      recursive: true,
-    })
+  const tempPath = (path: string): string =>
+    path + '.tmp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)
+
+  const tempSuffixPattern = /\.tmp-[a-z0-9]+-[a-z0-9]+$/
+
+  /** Android 的 Filesystem.rename 在目标存在时会先删除目标再 rename，不是真正原子操作。 */
+  type FileEncoding = (typeof Encoding)[keyof typeof Encoding]
+
+  /** 先写唯一临时文件再 rename，避免后台被杀时留下半个 JSON。 */
+  const writeFileAtomic = async (path: string, data: string, encoding: FileEncoding): Promise<void> => {
+    const tmp = tempPath(path)
+    // 失败时不能删除 temp：Android 的 rename 会先删除目标再 rename，
+    // 如果 rename 失败或进程在中间被杀，temp 是唯一还能恢复的数据。
+    await fs.writeFile({ path: tmp, directory: DIR, data, encoding, recursive: true })
+    await fs.rename({ from: tmp, to: path, directory: DIR, toDirectory: DIR })
   }
 
-  const listJson = async (dir: string): Promise<string[]> => {
+  const writeJson = async (path: string, value: unknown): Promise<void> => {
+    await writeFileAtomic(path, JSON.stringify(value), Encoding.UTF8)
+  }
+
+  const listAll = async (dir: string): Promise<string[]> => {
     try {
       const { files } = await fs.readdir({ path: dir, directory: DIR })
-      return files.map((entry) => entry.name).filter((name) => name.endsWith('.json'))
+      return files.map((entry) => entry.name)
     } catch {
       return []
     }
+  }
+
+  const deleteTempQuietly = async (path: string): Promise<void> => {
+    try {
+      await fs.deleteFile({ path, directory: DIR })
+    } catch {
+      // 临时文件不存在时忽略
+    }
+  }
+
+  const deleteSessionTemps = async (id: string): Promise<void> => {
+    const prefix = id + '.json.tmp-'
+    for (const name of await listAll(pathOf('/sessions'))) {
+      if (name.startsWith(prefix)) {
+        await deleteTempQuietly(pathOf('/sessions/' + name))
+      }
+    }
+  }
+
+  const promoteTemp = async (temp: string, target: string): Promise<void> => {
+    try {
+      await fs.rename({ from: temp, to: target, directory: DIR, toDirectory: DIR })
+    } catch {
+      // 目标暂时不可写时保留临时文件，下次启动会再尝试恢复
+    }
+  }
+
+  /** rename 删掉目标后进程被杀，会留下完整的 temp；启动时把它补回最终文件。 */
+  const recoverTemporaryFiles = async (): Promise<void> => {
+    const rootNames = await listAll(root)
+    for (const name of rootNames) {
+      if (!name.startsWith('summaries.json') || !tempSuffixPattern.test(name)) {
+        continue
+      }
+      const temp = pathOf('/' + name)
+      const target = pathOf('/summaries.json')
+      const tempValue = await readJson(temp)
+      const targetValue = await readJson(target)
+      if (Array.isArray(tempValue) && !Array.isArray(targetValue)) {
+        await promoteTemp(temp, target)
+      } else {
+        await deleteTempQuietly(temp)
+      }
+    }
+
+    const sessionNames = await listAll(pathOf('/sessions'))
+    for (const name of sessionNames) {
+      const match = name.match(tempSuffixPattern)
+      if (!match) {
+        continue
+      }
+      const targetName = name.slice(0, match.index ?? 0)
+      if (!targetName.endsWith('.json')) {
+        await deleteTempQuietly(pathOf('/sessions/' + name))
+        continue
+      }
+      const id = targetName.slice(0, -5)
+      const temp = pathOf('/sessions/' + name)
+      const target = pathOf('/sessions/' + targetName)
+      const tempValue = await readJson(temp)
+      const targetValue = await readJson(target)
+      const isSession = (value: unknown): value is Json =>
+        isRecord(value) && asString(value.id) === id && Array.isArray(value.messages)
+      if (!isSession(tempValue)) {
+        await deleteTempQuietly(temp)
+        continue
+      }
+      if (isSession(targetValue)) {
+        // 目标文件仍然完整时以目标为准；temp 可能只是上一次重命名失败留下的旧快照。
+        await deleteTempQuietly(temp)
+      } else {
+        await promoteTemp(temp, target)
+      }
+    }
+  }
+
+  let tempRecoveryTask: Promise<void> | undefined
+  const ensureTempRecovery = (): Promise<void> => {
+    tempRecoveryTask ??= recoverTemporaryFiles()
+    return tempRecoveryTask
+  }
+
+  const listJson = async (dir: string): Promise<string[]> => {
+    return (await listAll(dir)).filter((name) => name.endsWith('.json'))
   }
 
   const b64ToBytes = (text: string): Uint8Array => {
@@ -109,10 +204,50 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     updatedAt: summary.updatedAt,
   })
 
-  const readSummaries = async (): Promise<Json[]> => {
+  const readStoredSummaries = async (): Promise<Json[] | null> => {
     const stored = await readJson(pathOf('/summaries.json'))
-    return Array.isArray(stored) ? stored.filter(isRecord) : []
+    return Array.isArray(stored) ? stored.filter(isRecord) : null
   }
+
+  /** 所有会改摘要索引的操作串行执行，避免并发保存互相覆盖。 */
+  let summariesQueue: Promise<void> = Promise.resolve()
+  const withSummaries = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = summariesQueue.then(task, task)
+    summariesQueue = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
+  const rebuildSummariesUnlocked = async (): Promise<Json[]> => {
+    const summaries: Json[] = []
+    for (const name of await listJson(pathOf('/sessions'))) {
+      const session = await readJson(pathOf('/sessions/' + name))
+      if (isRecord(session)) {
+        summaries.push(summaryOf(session))
+      }
+    }
+    await writeJson(pathOf('/summaries.json'), summaries)
+    return summaries
+  }
+
+  /** 只有摘要与磁盘会话不一致时才重建，正常情况下只比对 ID。 */
+  const ensureSummariesUnlocked = async (): Promise<Json[]> => {
+    await ensureTempRecovery()
+    const names = await listJson(pathOf('/sessions'))
+    const ids = names.map((name) => name.slice(0, -5))
+    const stored = await readStoredSummaries()
+    if (stored && stored.length === ids.length) {
+      const storedIds = new Set(stored.map((summary) => asString(summary.id)))
+      if (storedIds.size === stored.length && ids.every((id) => storedIds.has(id))) {
+        return stored
+      }
+    }
+    return rebuildSummariesUnlocked()
+  }
+
+  const ensureSummaries = (): Promise<Json[]> => withSummaries(ensureSummariesUnlocked)
 
   const saveSession = async (session: Json): Promise<void> => {
     const id = asString(session.id)
@@ -120,15 +255,17 @@ if (win?.Capacitor?.isNativePlatform?.()) {
       return
     }
     await writeJson(pathOf('/sessions/' + id + '.json'), session)
-    const summaries = await readSummaries()
-    const index = summaries.findIndex((item) => item.id === id)
-    const summary = summaryOf(session)
-    if (index >= 0) {
-      summaries[index] = summary
-    } else {
-      summaries.push(summary)
-    }
-    await writeJson(pathOf('/summaries.json'), summaries)
+    await withSummaries(async () => {
+      const summaries = await ensureSummariesUnlocked()
+      const index = summaries.findIndex((item) => item.id === id)
+      const summary = summaryOf(session)
+      if (index >= 0) {
+        summaries[index] = summary
+      } else {
+        summaries.push(summary)
+      }
+      await writeJson(pathOf('/summaries.json'), summaries)
+    })
   }
 
   const parseBody = (body: string | Blob | undefined): Json => {
@@ -144,6 +281,7 @@ if (win?.Capacitor?.isNativePlatform?.()) {
   }
 
   win.__DSH_STORAGE_FETCH__ = async (path: string, init?: RequestInit): Promise<Response> => {
+    await ensureTempRecovery()
     const method = init?.method ?? 'GET'
     const parts = path.split('/').filter(Boolean)
     const body = init?.body as string | Blob | undefined
@@ -160,7 +298,7 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     }
 
     if (path === '/sessions' && method === 'GET') {
-      const summaries = await readSummaries()
+      const summaries = await ensureSummaries()
       return respond(200, summaries.map(publicSummary))
     }
 
@@ -178,13 +316,16 @@ if (win?.Capacitor?.isNativePlatform?.()) {
         return respond(200, { ok: true })
       }
       if (method === 'DELETE') {
-        try {
-          await fs.deleteFile({ path: file, directory: DIR })
-        } catch {
-          // 文件不存在时忽略
-        }
-        const summaries = (await readSummaries()).filter((item) => item.id !== id)
-        await writeJson(pathOf('/summaries.json'), summaries)
+        await withSummaries(async () => {
+          try {
+            await fs.deleteFile({ path: file, directory: DIR })
+          } catch {
+            // 文件不存在时忽略
+          }
+          await deleteSessionTemps(id)
+          const summaries = (await ensureSummariesUnlocked()).filter((item) => item.id !== id)
+          await writeJson(pathOf('/summaries.json'), summaries)
+        })
         return respond(200, { ok: true })
       }
     }
@@ -197,13 +338,15 @@ if (win?.Capacitor?.isNativePlatform?.()) {
         const title = asString(jsonBody().title)
         stored.title = title
         await writeJson(file, stored)
-        const summaries = await readSummaries()
-        for (const summary of summaries) {
-          if (summary.id === id) {
-            summary.title = title
+        await withSummaries(async () => {
+          const summaries = await ensureSummariesUnlocked()
+          for (const summary of summaries) {
+            if (summary.id === id) {
+              summary.title = title
+            }
           }
-        }
-        await writeJson(pathOf('/summaries.json'), summaries)
+          await writeJson(pathOf('/summaries.json'), summaries)
+        })
       }
       return respond(200, { ok: true })
     }
@@ -215,13 +358,7 @@ if (win?.Capacitor?.isNativePlatform?.()) {
           const id = asString(entry.id)
           const data = asString(entry.base64)
           if (id && data) {
-            await fs.writeFile({
-              path: pathOf('/files/' + id),
-              directory: DIR,
-              data,
-              encoding: Encoding.UTF8,
-              recursive: true,
-            })
+            await writeFileAtomic(pathOf('/files/' + id), data, Encoding.UTF8)
           }
         }
       }
@@ -245,7 +382,7 @@ if (win?.Capacitor?.isNativePlatform?.()) {
       if (method === 'PUT') {
         const blob = body as Blob
         const data = bytesToB64(await blob.arrayBuffer())
-        await fs.writeFile({ path: file, directory: DIR, data, encoding: Encoding.UTF8, recursive: true })
+        await writeFileAtomic(file, data, Encoding.UTF8)
         return respond(200, { ok: true })
       }
     }
@@ -265,13 +402,7 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     if (parts[0] === 'staging' && parts[1] === 'files' && parts.length === 3 && method === 'PUT') {
       const blob = body as Blob
       const data = bytesToB64(await blob.arrayBuffer())
-      await fs.writeFile({
-        path: pathOf('/staging/files/' + parts[2]),
-        directory: DIR,
-        data,
-        encoding: Encoding.UTF8,
-        recursive: true,
-      })
+      await writeFileAtomic(pathOf('/staging/files/' + parts[2]), data, Encoding.UTF8)
       return respond(200, { ok: true })
     }
 
@@ -280,16 +411,19 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     }
 
     if (path === '/staging/commit' && method === 'POST') {
-      const names = await listJson(pathOf('/staging/sessions'))
-      const summaries: Json[] = []
-      for (const name of names) {
-        const staged = await readJson(pathOf('/staging/sessions/' + name))
-        if (isRecord(staged)) {
-          await writeJson(pathOf('/sessions/' + name), staged)
-          summaries.push(summaryOf(staged))
+      const summaries = await withSummaries(async () => {
+        const names = await listJson(pathOf('/staging/sessions'))
+        const out: Json[] = []
+        for (const name of names) {
+          const staged = await readJson(pathOf('/staging/sessions/' + name))
+          if (isRecord(staged)) {
+            await writeJson(pathOf('/sessions/' + name), staged)
+            out.push(summaryOf(staged))
+          }
         }
-      }
-      await writeJson(pathOf('/summaries.json'), summaries)
+        await writeJson(pathOf('/summaries.json'), out)
+        return out
+      })
       return respond(200, summaries.map(publicSummary))
     }
 
@@ -299,7 +433,9 @@ if (win?.Capacitor?.isNativePlatform?.()) {
     }
 
     if (path === '/history/clear' && method === 'POST') {
-      await writeJson(pathOf('/summaries.json'), [])
+      await withSummaries(async () => {
+        await writeJson(pathOf('/summaries.json'), [])
+      })
       return respond(200, { ok: true })
     }
 
