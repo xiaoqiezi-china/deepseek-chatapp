@@ -1049,9 +1049,11 @@ fn resolve_cli_path(value: &str, cwd: &Path) -> String {
 
 /// 解析 `--text`、`--file`、`--search`、`--thinking`、`--send`、`--new`，
 /// 同时支持 `--opt value` 与 `--opt=value`。第一个参数是可执行文件路径。
-/// 既没有文本也没有附件时返回 None：普通启动不应改动界面状态。
+/// 一个开关都没识别到时返回 None：普通启动（或开发模式附加的参数）不应改动界面状态；
+/// 只带开关的调用（如 `--thinking`、`--send`）是有效调用，必须入队。
 fn parse_cli_args(args: Vec<String>, cwd: &Path) -> Option<CliOptions> {
   let mut options = CliOptions::default();
+  let mut recognized = false;
   let mut args = args.into_iter();
   let _ = args.next();
   while let Some(raw) = args.next() {
@@ -1061,24 +1063,40 @@ fn parse_cli_args(args: Vec<String>, cwd: &Path) -> Option<CliOptions> {
     };
     let mut take_value = || inline.clone().or_else(|| args.next());
     match flag.as_str() {
-      "--text" => options.text = take_value(),
+      "--text" => {
+        recognized = true;
+        options.text = take_value();
+      }
       "--file" => {
+        recognized = true;
         if let Some(value) = take_value() {
           options.files.push(resolve_cli_path(&value, cwd));
         }
       }
-      "--search" => options.search = true,
-      "--thinking" => options.thinking = true,
-      "--send" => options.send = true,
-      "--new" => options.new = true,
+      "--search" => {
+        recognized = true;
+        options.search = true;
+      }
+      "--thinking" => {
+        recognized = true;
+        options.thinking = true;
+      }
+      "--send" => {
+        recognized = true;
+        options.send = true;
+      }
+      "--new" => {
+        recognized = true;
+        options.new = true;
+      }
       // 未识别的参数（如开发模式附加的参数）直接忽略
       _ => {}
     }
   }
-  if options.text.is_none() && options.files.is_empty() {
-    None
-  } else {
+  if recognized {
     Some(options)
+  } else {
+    None
   }
 }
 
@@ -1230,9 +1248,19 @@ mod tests {
     assert_eq!(options.files, vec![absolute.to_string()]);
     assert!(options.text.is_none());
 
-    // 没有文本也没有附件：普通启动，不改动界面状态
-    assert!(parse_cli_args(vec!["app".to_string(), "--new".to_string()], cwd).is_none());
+    // 只带开关的调用是有效调用：--thinking / --search / --send 必须能单独生效
+    let options = parse_cli_args(vec!["app".to_string(), "--thinking".to_string()], cwd)
+      .expect("flag only");
+    assert!(options.thinking && !options.search && !options.send);
+    assert!(options.text.is_none() && options.files.is_empty());
+    let options = parse_cli_args(vec!["app".to_string(), "--send".to_string()], cwd).expect("send");
+    assert!(options.send);
+    let options = parse_cli_args(vec!["app".to_string(), "--new".to_string()], cwd).expect("new");
+    assert!(options.new);
+
+    // 没有任何可识别参数：普通启动，不改动界面状态
     assert!(parse_cli_args(vec!["app".to_string()], cwd).is_none());
+    assert!(parse_cli_args(vec!["app".to_string(), "--no-watch".to_string()], cwd).is_none());
   }
 
   #[test]
